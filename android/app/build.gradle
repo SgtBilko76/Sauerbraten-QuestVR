@@ -1,0 +1,84 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace = "org.sauerquest.vr"
+    compileSdk = 34
+    ndkVersion '25.1.8937393'
+
+    defaultConfig {
+        applicationId "org.sauerquest.vr"
+        minSdkVersion 29
+        targetSdkVersion 32
+        versionCode 1
+        versionName "0.1.0-phase1"
+
+        externalNativeBuild {
+            ndkBuild {
+                def numProcs = Runtime.runtime.availableProcessors()
+                arguments "V=0", "-j$numProcs"
+                abiFilters 'arm64-v8a'
+            }
+        }
+    }
+
+    externalNativeBuild {
+        ndkBuild {
+            path file('src/main/cpp/Android.mk')
+        }
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+            jniDebuggable true
+        }
+        release {
+            debuggable false
+            jniDebuggable false
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDir "$buildDir/generated/openxr-loader/jniLibs"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = '1.8'
+        targetCompatibility = '1.8'
+    }
+
+    lintOptions {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}
+
+configurations {
+    openxrLoaderAar
+}
+
+dependencies {
+    // Only the raw AAR contents are needed (to extract libopenxr_loader.so
+    // below) -- we build with classic ndk-build, not CMake/prefab, so there
+    // is no C++ dependency-resolution use for a normal "implementation" dep
+    // here, and declaring the same coordinate on both configurations was
+    // tripping a Gradle 9 configuration-resolution-ordering error.
+    openxrLoaderAar "org.khronos.openxr:openxr_loader_for_android:1.1.60@aar"
+}
+
+tasks.register("extractOpenXrLoader", Copy) {
+    from({ zipTree(configurations.openxrLoaderAar.singleFile) }) {
+        include "prefab/modules/openxr_loader/libs/android.arm64-v8a/libopenxr_loader.so"
+        eachFile { fileCopyDetails ->
+            fileCopyDetails.path = "arm64-v8a/libopenxr_loader.so"
+        }
+        includeEmptyDirs = false
+    }
+    into "$buildDir/generated/openxr-loader/jniLibs"
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("extractOpenXrLoader")
+}

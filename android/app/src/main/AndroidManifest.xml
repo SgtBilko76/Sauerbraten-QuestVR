@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="org.sauerquest.vr"
+    android:versionCode="1"
+    android:versionName="0.1.0-phase1"
+    android:installLocation="auto">
+
+    <!-- NOTE: this manifest's VR metadata/permissions/intent-categories are
+         adapted from QuakeQuest (github.com/Team-Beef-Studios/QuakeQuest,
+         GPLv2), whose values were last verified a few years ago. Re-check
+         against current Meta Quest Developer Hub docs before any release
+         build; see the project plan, Phase 0/1 risk notes. -->
+
+    <uses-feature android:glEsVersion="0x00030001" android:required="true" />
+    <uses-feature android:name="android.hardware.vr.headtracking"
+        android:version="1" android:required="true" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <uses-permission android:name="org.khronos.openxr.permission.OPENXR_SYSTEM" />
+    <queries>
+        <provider android:authorities="org.khronos.openxr.runtime_broker;org.khronos.openxr.system_runtime_broker" />
+        <intent>
+            <action android:name="org.khronos.openxr.OpenXRRuntimeService" />
+        </intent>
+        <intent>
+            <action android:name="org.khronos.openxr.OpenXRApiLayerService" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:label="@string/app_name"
+        android:extractNativeLibs="true">
+
+        <meta-data android:name="com.samsung.android.vr.application.mode" android:value="vr_only" />
+        <meta-data android:name="com.oculus.supportedDevices" android:value="quest2|quest3|questpro" />
+        <meta-data android:name="com.oculus.vr.focusaware" android:value="true" />
+
+        <activity
+            android:exported="true"
+            android:name="org.sauerquest.vr.SauerQuestActivity"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:label="@string/app_name"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:excludeFromRecents="true"
+            android:configChanges="screenSize|screenLayout|orientation|keyboardHidden|keyboard|navigation|uiMode">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="com.oculus.intent.category.VR" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
