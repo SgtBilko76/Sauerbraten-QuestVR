@@ -2,6 +2,10 @@
 
 #include "engine.h"
 
+#ifdef __ANDROID__
+#include <dlfcn.h>
+#endif
+
 bool hasVAO = false, hasFBO = false, hasAFBO = false, hasDS = false, hasTF = false, hasTRG = false, hasTSW = false, hasS3TC = false, hasFXT1 = false, hasLATC = false, hasRGTC = false, hasAF = false, hasFBB = false, hasUBO = false, hasMBR = false;
 
 VAR(glversion, 1, 0, 0);
@@ -167,7 +171,21 @@ PFNGLISVERTEXARRAYPROC      glIsVertexArray_      = NULL;
 
 void *getprocaddress(const char *name)
 {
-    return SDL_GL_GetProcAddress(name);
+    void *proc = SDL_GL_GetProcAddress(name);
+#ifdef __ANDROID__
+    // The EGL spec only guarantees eglGetProcAddress() (what
+    // SDL_GL_GetProcAddress() calls into on Android) resolves *extension*
+    // functions -- core functions are commonly, but not universally,
+    // supported too. On this Adreno driver (Quest 3, confirmed on-device),
+    // it returns NULL for plain core GLES3 names like "glBindVertexArray"
+    // even though the symbol is right there, already linked in, in the
+    // same libGLESv3.so this binary links against (that's how e.g.
+    // glDrawBuffers -- called directly, no getprocaddress() involved --
+    // already works). Fall back to dlsym against the process's already-
+    // loaded libraries, which finds it directly.
+    if(!proc) proc = dlsym(RTLD_DEFAULT, name);
+#endif
+    return proc;
 }
 
 VARP(ati_skybox_bug, 0, 0, 1);
@@ -189,6 +207,15 @@ hashset<const char *> glexts;
 
 void parseglexts()
 {
+    // glGetStringi(GL_EXTENSIONS, i) is a desktop-GL-3.0-core-profile
+    // feature (the replacement for the old single-space-separated-string
+    // glGetString(GL_EXTENSIONS), which core profile deprecated). GLES
+    // never adopted it -- GLES 3.x still uses the classic single-string
+    // form -- so glGetStringi_ is left NULL on Android (see
+    // gl_checkextensions()'s __ANDROID__ guard on loading it), and this
+    // branch must never run there; calling through it would be a
+    // null-pointer crash, not a soft failure.
+#ifndef __ANDROID__
     if(glversion >= 300)
     {
         GLint numexts = 0;
@@ -200,6 +227,7 @@ void parseglexts()
         }
     }
     else
+#endif
     {
         const char *exts = (const char *)glGetString(GL_EXTENSIONS);
         for(;;)
@@ -380,11 +408,18 @@ void gl_checkextensions()
     glDrawBuffers_ =              (PFNGLDRAWBUFFERSPROC)              getprocaddress("glDrawBuffers");
 #endif
 
+    // glGetStringi/glBindFragDataLocation are desktop-GL-3.0-core-profile
+    // features with no GLES equivalent (see parseglexts()'s comment) --
+    // don't bother looking them up on Android, they'd just resolve to
+    // NULL anyway, and leaving them NULL is exactly what their (already
+    // __ANDROID__-guarded) call sites expect.
+#ifndef __ANDROID__
     if(glversion >= 300)
     {
         glGetStringi_ =            (PFNGLGETSTRINGIPROC)          getprocaddress("glGetStringi");
         glBindFragDataLocation_ =  (PFNGLBINDFRAGDATALOCATIONPROC)getprocaddress("glBindFragDataLocation");
     }
+#endif
 
     const char *glslstr = (const char *)glGetString(GL_SHADING_LANGUAGE_VERSION);
     uint glslmajorversion, glslminorversion;

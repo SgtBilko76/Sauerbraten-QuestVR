@@ -6,6 +6,10 @@
 #include "SDL_syswm.h"
 #endif
 
+#ifdef __ANDROID__
+#include "androidbridge.h"
+#endif
+
 extern void cleargamma();
 
 void cleanup()
@@ -65,7 +69,16 @@ void fatal(const char *s, ...)    // failure exit
                 #endif
             }
             SDL_Quit();
+#ifndef __ANDROID__
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Cube 2: Sauerbraten fatal error", msg, NULL);
+#endif
+            // On Android, logoutf() above already reported this (and, via
+            // the native-thread stdout/stderr redirection set up in
+            // vr_glue/sauerquest_vr_bootstrap.c, it reaches logcat); a
+            // message box isn't meaningful here, and SDL's Android
+            // implementation of it (Android_JNI_ShowMessageBox) assumes
+            // org/libsdl/app/SDLActivity exists, which this port doesn't
+            // ship -- calling it crashes instead of degrading gracefully.
         }
     }
 
@@ -637,6 +650,16 @@ VARFP(vsynctear, 0, 0, 1, { if(vsync) restorevsync(); });
 
 void setupscreen()
 {
+#ifdef __ANDROID__
+    // No SDL window/GL context on Android: the OpenXR native thread
+    // already created (and made current on this same thread, before
+    // main() was called) the real EGL context/surface the swapchain
+    // images render into -- see android_sauer_main() and the project
+    // plan's Phase 4. Just pick up the per-eye buffer size it already
+    // knows.
+    android_get_eye_size(&screenw, &screenh);
+    return;
+#else
     if(glcontext)
     {
         SDL_GL_DeleteContext(glcontext);
@@ -739,6 +762,7 @@ void setupscreen()
     SDL_SetWindowMaximumSize(screen, SCR_MAXW, SCR_MAXH);
 
     SDL_GetWindowSize(screen, &screenw, &screenh);
+#endif
 }
 
 void resetgl()
@@ -1042,7 +1066,12 @@ void swapbuffers(bool overlay)
 {
     recorder::capture(overlay);
     gle::disable();
+#ifndef __ANDROID__
     SDL_GL_SwapWindow(screen);
+#endif
+    // On Android, presentation is OpenXR's swapchain release (done by the
+    // native VR thread after both eyes are drawn), not an SDL window swap
+    // -- there is no SDL window (see setupscreen()'s __ANDROID__ branch).
 }
 
 VARP(menufps, 0, 60, 1000);
@@ -1070,6 +1099,73 @@ void limitfps(int &millis, int curmillis)
         }
     }
 }
+
+// gametick()/gamerender(): the former for(;;) loop body's non-rendering
+// and rendering halves, factored out so desktop's loop and Android's
+// per-frame bridge functions (below) share one implementation instead of
+// two copies that could drift.
+void updatefpshistory(int millis); // defined further below, before main()
+static void gametick()
+{
+    static int frames = 0;
+    int millis = getclockmillis();
+    limitfps(millis, totalmillis);
+    elapsedtime = millis - totalmillis;
+    static int timeerr = 0;
+    int scaledtime = game::scaletime(elapsedtime) + timeerr;
+    curtime = scaledtime/100;
+    timeerr = scaledtime%100;
+    if(!multiplayer(false) && curtime>200) curtime = 200;
+    if(game::ispaused()) curtime = 0;
+    lastmillis += curtime;
+    totalmillis = millis;
+    updatetime();
+
+    checkinput();
+    menuprocess();
+    tryedit();
+
+    if(lastmillis) game::updateworld();
+
+    checksleep(lastmillis);
+
+    serverslice(false, 0);
+
+    if(frames) updatefpshistory(elapsedtime);
+    frames++;
+
+    // miscellaneous general game effects
+    recomputecamera();
+    updateparticles();
+    updatesounds();
+}
+
+static void gamerender()
+{
+    if(mainmenu) gl_drawmainmenu();
+    else gl_drawframe();
+}
+
+#ifdef __ANDROID__
+void android_sauer_tick(void)
+{
+    gametick();
+}
+
+void android_sauer_drawframe(void)
+{
+    if(minimized) return;
+    inbetweenframes = false;
+    gamerender();
+}
+
+void android_sauer_endframe(void)
+{
+    if(minimized) return;
+    swapbuffers();
+    renderedframe = inbetweenframes = true;
+}
+#endif
 
 #if defined(WIN32) && !defined(_DEBUG) && !defined(__GNUC__)
 void stackdumper(unsigned int type, EXCEPTION_POINTERS *ep)
@@ -1250,7 +1346,16 @@ int main(int argc, char **argv)
     {
         logoutf("init: sdl");
 
+        // No SDL_INIT_VIDEO on Android: there's no SDL window (the OpenXR
+        // native thread owns the real EGL context/surface -- see
+        // setupscreen()), and SDL's Android video backend expects to be
+        // driven through org.libsdl.app.SDLActivity, which this port
+        // doesn't use.
+#ifdef __ANDROID__
+        if(SDL_Init(SDL_INIT_TIMER|SDL_INIT_AUDIO)<0) fatal("Unable to initialize SDL: %s", SDL_GetError());
+#else
         if(SDL_Init(SDL_INIT_TIMER|SDL_INIT_VIDEO|SDL_INIT_AUDIO)<0) fatal("Unable to initialize SDL: %s", SDL_GetError());
+#endif
 
 #ifdef SDL_VIDEO_DRIVER_X11
         SDL_version version;
@@ -1357,53 +1462,46 @@ int main(int argc, char **argv)
     inputgrab(grabinput = true);
     ignoremousemotion();
 
+#ifdef __ANDROID__
+    // One-time init only: per-frame ticking is driven externally by the
+    // OpenXR native thread via android_sauer_tick()/drawframe()/endframe()
+    // below, instead of this function owning its own loop -- there is no
+    // SDL window/event loop to drive it from on Android (see setupscreen()
+    // and swapbuffers()'s __ANDROID__ branches). See the project plan's
+    // Phase 4.
+    return EXIT_SUCCESS;
+#else
     for(;;)
     {
-        static int frames = 0;
-        int millis = getclockmillis();
-        limitfps(millis, totalmillis);
-        elapsedtime = millis - totalmillis;
-        static int timeerr = 0;
-        int scaledtime = game::scaletime(elapsedtime) + timeerr;
-        curtime = scaledtime/100;
-        timeerr = scaledtime%100;
-        if(!multiplayer(false) && curtime>200) curtime = 200;
-        if(game::ispaused()) curtime = 0;
-		lastmillis += curtime;
-        totalmillis = millis;
-        updatetime();
-
-        checkinput();
-        menuprocess();
-        tryedit();
-
-        if(lastmillis) game::updateworld();
-
-        checksleep(lastmillis);
-
-        serverslice(false, 0);
-
-        if(frames) updatefpshistory(elapsedtime);
-        frames++;
-
-        // miscellaneous general game effects
-        recomputecamera();
-        updateparticles();
-        updatesounds();
-
+        gametick();
         if(minimized) continue;
-
         inbetweenframes = false;
-        if(mainmenu) gl_drawmainmenu();
-        else gl_drawframe();
+        gamerender();
         swapbuffers();
         renderedframe = inbetweenframes = true;
     }
 
     ASSERT(0);
     return EXIT_FAILURE;
+#endif
 
     #if defined(WIN32) && !defined(_DEBUG) && !defined(__GNUC__)
     } __except(stackdumper(0, GetExceptionInformation()), EXCEPTION_CONTINUE_SEARCH) { return 0; }
     #endif
 }
+
+#ifdef __ANDROID__
+int android_sauer_main(int argc, char **argv)
+{
+    // SDL_Init() refuses to run ("did you include SDL_main.h...") unless
+    // SDL_SetMainReady() has been called first -- normally done for you by
+    // SDL2main's auto-generated real main() (SDL_main.h's #define main
+    // SDL_main trick renames this file's main() and expects something
+    // else to call SDL_main() after preparing SDL's state), or by
+    // SDLActivity's own JNI init on stock SDL2 Android apps. Neither
+    // applies here: this port calls main()/SDL_main() directly from the
+    // OpenXR native thread, so this safety check needs satisfying by hand.
+    SDL_SetMainReady();
+    return main(argc, argv);
+}
+#endif

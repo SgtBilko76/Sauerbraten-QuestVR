@@ -1,15 +1,21 @@
 /*
- * SauerQuest VR bootstrap — Phase 1 ("hello triangle in headset").
+ * SauerQuest VR bootstrap.
  *
  * This is a from-scratch JNI/lifecycle driver (not adapted from QuakeQuest)
- * that exercises TBXR_Common.c/OpenXrInput.c's OpenXR session/swapchain/frame
- * loop in isolation, with zero Sauerbraten engine linkage. Its only job is to
- * prove the Android.mk/Gradle/manifest/OpenXR-loader toolchain works end to
- * end before any engine porting begins (see the project plan, Phase 1).
+ * built on top of TBXR_Common.c/OpenXrInput.c's OpenXR session/swapchain/
+ * frame loop. Phase 1 proved the toolchain end to end with a standalone
+ * colored clear and no engine linkage; Phase 4 (here) calls into the real
+ * Sauerbraten engine every frame via androidbridge.h's C-linkage entry
+ * points, mirroring QuakeQuest's AppThreadFunction pattern: boot the
+ * engine once via android_sauer_main(), then drive per-frame
+ * tick/draw/endframe from this thread's own loop instead of the engine
+ * owning one itself (see src/engine/main.cpp's __ANDROID__ branch).
  *
- * Visual smoke test: each eye clears to a distinct color, and the left eye's
- * clear color shifts with head yaw, so a head-pose-reactive stereo image
- * confirms xrLocateViews/xrLocateSpace data is live.
+ * Both eyes still render identically (monoscopic) using the engine's
+ * existing single-camera state -- real per-eye stereo matrices are
+ * Phase 5's job, not this one. The goal here is just to get real engine
+ * pixels (the main menu, initially) on screen and prove Phase 3's GLES3
+ * fixes actually work at runtime, not just that they compile.
  */
 
 #include <math.h>
@@ -17,10 +23,50 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/prctl.h>
+#include <pthread.h>
 
 #include "VrCommon.h"
+#include "androidbridge.h"
 
 void jni_shutdown(void); /* defined below; VR_Shutdown() needs it forward-declared */
+
+/* Sauerbraten's own logging (logoutf() -> stdout, see src/engine/server.cpp)
+ * goes nowhere on Android unless something redirects stdout/stderr to
+ * logcat -- there is no terminal for it to inherit. Standard NDK pattern:
+ * pipe stdout/stderr into a background thread that forwards each line via
+ * __android_log_write. Started once, before android_sauer_main(), so init
+ * logging is visible from the very first line. */
+static void *StdioLogThread(void *arg)
+{
+    int fd = *(int *)arg;
+    free(arg);
+    char buf[512];
+    ssize_t n;
+    while ((n = read(fd, buf, sizeof(buf) - 1)) > 0) {
+        if (buf[n - 1] == '\n') n--;
+        buf[n] = '\0';
+        __android_log_write(ANDROID_LOG_INFO, "SauerQuest", buf);
+    }
+    return NULL;
+}
+
+static void RedirectStdioToLogcat(void)
+{
+    int pipefd[2];
+    if (pipe(pipefd) != 0) return;
+
+    dup2(pipefd[1], STDOUT_FILENO);
+    dup2(pipefd[1], STDERR_FILENO);
+    close(pipefd[1]);
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+
+    int *readFd = (int *)malloc(sizeof(int));
+    *readFd = pipefd[0];
+    pthread_t thread;
+    pthread_create(&thread, NULL, StdioLogThread, readFd);
+    pthread_detach(thread);
+}
 
 /* ---- Required by TBXR_Common.c (referenced even on code paths we never
  * take, e.g. the flat "screen layer" branch of TBXR_submitFrame) ---- */
@@ -75,22 +121,12 @@ void VR_Shutdown(void)
     jni_shutdown();
 }
 
-/* ---- Minimal per-eye render: colored clear reacting to head yaw ---- */
-
-static void RenderEye(int eye)
+/* Called by src/engine/main.cpp's setupscreen() (via androidbridge.h) once
+ * TBXR_InitRenderer() below has already sized the eye buffers. */
+void android_get_eye_size(int *w, int *h)
 {
-    /* Left eye: hue sweeps with head yaw, so turning your head visibly
-     * changes the color -- confirms head tracking is live, not just that
-     * a static frame is being submitted. Right eye: fixed color, so a
-     * missing/wrong eye in the compositor is obvious at a glance. */
-    if (eye == 0) {
-        float t = fmodf(playerYaw, 360.0f) / 360.0f;
-        if (t < 0.0f) t += 1.0f;
-        glClearColor(t, 0.15f, 1.0f - t, 1.0f);
-    } else {
-        glClearColor(0.1f, 0.8f, 0.2f, 1.0f);
-    }
-    glClear(GL_COLOR_BUFFER_BIT);
+    *w = (int)gAppState.Width;
+    *h = (int)gAppState.Height;
 }
 
 void *AppThreadFunction(void *parm)
@@ -103,6 +139,8 @@ void *AppThreadFunction(void *parm)
 
     prctl(PR_SET_NAME, (long)"SauerQuestVRThread", 0, 0, 0);
 
+    RedirectStdioToLogcat();
+
     gAppState.MainThreadTid = gettid();
 
     TBXR_InitialiseOpenXR();
@@ -111,19 +149,31 @@ void *AppThreadFunction(void *parm)
     TBXR_InitActions();
     TBXR_WaitForSessionActive();
 
-    ALOGV("SauerQuest VR bootstrap: entering frame loop (%dx%d per eye)",
+    ALOGV("SauerQuest VR bootstrap: booting engine (%dx%d per eye)",
           (int)gAppState.Width, (int)gAppState.Height);
+
+    {
+        int argc = 1;
+        char *argv[] = { (char *)"sauerquest" };
+        android_sauer_main(argc, argv);
+    }
+
+    ALOGV("SauerQuest VR bootstrap: engine booted, entering frame loop");
 
     while (runStatus == -1) {
         TBXR_FrameSetup();
 
+        android_sauer_tick();
+
         for (int eye = 0; eye < ovrMaxNumEyes; eye++) {
             TBXR_prepareEyeBuffer(eye);
             if (gAppState.FrameState.shouldRender) {
-                RenderEye(eye);
+                android_sauer_drawframe();
             }
             TBXR_finishEyeBuffer(eye);
         }
+
+        android_sauer_endframe();
 
         TBXR_submitFrame();
     }
@@ -157,12 +207,27 @@ void jni_shutdown(void)
  * mJavaVM, which its audio backend needs). Two JNI_OnLoad definitions in
  * the same .so is a link error either way, and SDL's is the one that must
  * win, so jVM is captured here from onCreate's env instead. */
+
+/* SDL_android.c's nativeSetupJNI() (mangled per its SDL_JAVA_INTERFACE
+ * macro to Java_org_libsdl_app_SDLActivity_nativeSetupJNI) sets its global
+ * mActivityClass -- required by SDL_AndroidGetInternalStoragePath() and
+ * friends -- from whichever class calls it. Upstream, that's Java calling
+ * into org.libsdl.app.SDLActivity's own native method declaration; this
+ * port has no such class, so it's called directly as a plain C function
+ * below instead, passing our real Activity's class (see
+ * SauerQuestActivity.getContext(), the one static method on it SDL's
+ * lookups actually need). */
+extern void Java_org_libsdl_app_SDLActivity_nativeSetupJNI(JNIEnv *env, jclass cls);
+
 JNIEXPORT jlong JNICALL
 Java_org_sauerquest_vr_SauerQuestJNILib_onCreate(JNIEnv *env, jclass activityClass, jobject activity)
 {
     ALOGV("SauerQuestJNILib::onCreate()");
 
     (*env)->GetJavaVM(env, &jVM);
+
+    jclass realActivityClass = (*env)->GetObjectClass(env, activity);
+    Java_org_libsdl_app_SDLActivity_nativeSetupJNI(env, realActivityClass);
 
     ovrAppThread *appThread = (ovrAppThread *)malloc(sizeof(ovrAppThread));
     ovrAppThread_Create(appThread, env, activity, activityClass);

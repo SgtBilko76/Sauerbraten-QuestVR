@@ -109,6 +109,18 @@ static void compileglslshader(GLenum type, GLuint &obj, const char *def, const c
     const char *source = def + strspn(def, " \t\r\n");
     const char *parts[16];
     int numparts = 0;
+#ifdef __ANDROID__
+    // GLES requires a suffixed "#version <NNN> es" pragma (300/310/320) --
+    // the desktop-style unsuffixed "#version 150" the branch below emits
+    // is rejected outright by the Adreno driver ("Unsupported or invalid
+    // OpenGL ES version"), failing every single shader compile. glslversion
+    // is already the right number here (findglversion() in rendergl.cpp
+    // parses "OpenGL ES GLSL ES 3.20" into 320 the same way it parses
+    // desktop version strings) -- only the header's literal text differs.
+    char glesheader[32];
+    formatstring(glesheader, "#version %d es\n", glslversion);
+    parts[numparts++] = glesheader;
+#else
     static const struct { int version; const char * const header; } glslversions[] =
     {
         { 330, "#version 330\n" },
@@ -121,6 +133,7 @@ static void compileglslshader(GLenum type, GLuint &obj, const char *def, const c
         parts[numparts++] = glslversions[i].header;
         break;
     }
+#endif
     if(glslversion >= 130)
     {
         if(type == GL_VERTEX_SHADER) parts[numparts++] =
@@ -129,7 +142,16 @@ static void compileglslshader(GLenum type, GLuint &obj, const char *def, const c
         else if(type == GL_FRAGMENT_SHADER)
         {
             parts[numparts++] = "#define varying in\n";
+            // GLES fragment shaders have no implicit default float
+            // precision at all (unlike desktop GLSL, where precision
+            // qualifiers are accepted but optional) -- omitting this is a
+            // compile error on every GLES version, not just old ones, so
+            // the desktop glslversion<150 gate below doesn't apply here.
+#ifdef __ANDROID__
+            parts[numparts++] = "precision highp float;\n";
+#else
             if(glslversion < 150) parts[numparts++] = "precision highp float;\n";
+#endif
             if(glversion >= 300) parts[numparts++] =
                 "out vec4 cube2_FragColor;\n"
                 "#define gl_FragColor cube2_FragColor\n";
@@ -198,10 +220,17 @@ static void linkglslprogram(Shader &s, bool msg = true)
             attribs |= 1<<a.loc;
         }
         loopi(gle::MAXATTRIBS) if(!(attribs&(1<<i))) glBindAttribLocation_(s.program, i, gle::attribnames[i]);
+        // glBindFragDataLocation is desktop-GL-only (no GLES equivalent,
+        // and glBindFragDataLocation_ is left NULL on Android -- see
+        // gl_checkextensions()); GLES fragment shaders declare their
+        // single output's location in-shader instead, which the
+        // glsl.cfg-generated sources already do.
+#ifndef __ANDROID__
         if(glversion >= 300)
         {
             glBindFragDataLocation_(s.program, 0, "cube2_FragColor");
         }
+#endif
         glLinkProgram_(s.program);
         glGetProgramiv_(s.program, GL_LINK_STATUS, &success);
     }
