@@ -150,21 +150,19 @@ void jni_shutdown(void)
     (*env)->CallVoidMethod(env, jniCallbackObj, android_shutdown);
 }
 
-int JNI_OnLoad(JavaVM *vm, void *reserved)
-{
-    JNIEnv *env;
-    jVM = vm;
-    if ((*vm)->GetEnv(vm, (void **)&env, JNI_VERSION_1_4) != JNI_OK) {
-        ALOGE("Failed JNI_OnLoad");
-        return -1;
-    }
-    return JNI_VERSION_1_4;
-}
-
+/* No JNI_OnLoad of our own: SDL2's SDL_android.c already defines one (it
+ * registers native methods for org/libsdl/app/SDLActivity classes we don't
+ * have -- those registrations harmlessly fail-and-log, per its own
+ * register_methods() error handling -- and captures SDL's internal
+ * mJavaVM, which its audio backend needs). Two JNI_OnLoad definitions in
+ * the same .so is a link error either way, and SDL's is the one that must
+ * win, so jVM is captured here from onCreate's env instead. */
 JNIEXPORT jlong JNICALL
 Java_org_sauerquest_vr_SauerQuestJNILib_onCreate(JNIEnv *env, jclass activityClass, jobject activity)
 {
     ALOGV("SauerQuestJNILib::onCreate()");
+
+    (*env)->GetJavaVM(env, &jVM);
 
     ovrAppThread *appThread = (ovrAppThread *)malloc(sizeof(ovrAppThread));
     ovrAppThread_Create(appThread, env, activity, activityClass);
