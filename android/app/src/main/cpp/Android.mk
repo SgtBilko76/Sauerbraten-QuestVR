@@ -1,27 +1,12 @@
-LOCAL_PATH := $(call my-dir)
-
-# ---------------------------------------------------------------------------
-# libsauerquest.so — Phase 1: OpenXR bootstrap only, no Sauerbraten engine
-# linkage yet (that arrives in Phase 2+). See the project plan for phases.
-# ---------------------------------------------------------------------------
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := sauerquest
-LOCAL_LDLIBS := -llog -landroid -lGLESv3 -lEGL -ldl
-
-LOCAL_C_INCLUDES := \
-    $(LOCAL_PATH)/openxr_sdk/include \
-    $(LOCAL_PATH)/openxr_sdk/src/common \
-    $(LOCAL_PATH)/vr_glue
-
-LOCAL_SRC_FILES := \
-    vr_glue/TBXR_Common.c \
-    vr_glue/OpenXrInput.c \
-    vr_glue/sauerquest_vr_bootstrap.c
-
-LOCAL_CFLAGS := -Wall -Wno-unused-variable -Wno-unused-function
-
-include $(BUILD_SHARED_LIBRARY)
+# Captured once, up front, into a plain (non-LOCAL_*) variable. $(call
+# my-dir) resolves via $(lastword $(MAKEFILE_LIST)), which keeps growing
+# across every include this file performs (it's not a call stack -- it
+# never "pops" on return), so calling my-dir again anywhere after the
+# third_party/ include below returns whatever the *last* nested makefile
+# happened to be, not this directory. Every reference to this file's own
+# directory after that point uses this saved variable instead of my-dir.
+SAUER_CPP_DIR := $(call my-dir)
+LOCAL_PATH := $(SAUER_CPP_DIR)
 
 # ---------------------------------------------------------------------------
 # Path to the (untouched) desktop Sauerbraten source tree, sibling to
@@ -29,6 +14,20 @@ include $(BUILD_SHARED_LIBRARY)
 # build this is transcribed from.
 # ---------------------------------------------------------------------------
 SAUER_SRC_REL := ../../../../../src
+
+# ---------------------------------------------------------------------------
+# Vendored SDL2/SDL2_image/SDL2_mixer (see third_party/README.md for what's
+# vendored and why). Defines SDL2_static/SDL2_image_static/SDL2_mixer_static
+# among other modules; included first so later modules can reference them
+# via LOCAL_STATIC_LIBRARIES.
+# ---------------------------------------------------------------------------
+include $(SAUER_CPP_DIR)/third_party/Android.mk
+
+# third_party/Android.mk's all-subdir-makefiles include leaves LOCAL_PATH
+# pointing at whichever subdirectory (e.g. SDL2_mixer/) was processed last
+# -- restore it from the saved variable (not my-dir, see above) before
+# resuming our own CLEAR_VARS blocks below.
+LOCAL_PATH := $(SAUER_CPP_DIR)
 
 # ---------------------------------------------------------------------------
 # libenet.a -- Sauerbraten's vendored ENet networking library. Not needed
@@ -59,9 +58,10 @@ include $(BUILD_STATIC_LIBRARY)
 # libsauerengine.a -- Phase 2: the Sauerbraten client engine (shared/,
 # engine/, fpsgame/), transcribed 1:1 from src/Makefile's CLIENT_OBJS list.
 # Built as a static library so compile-only iteration doesn't require SDL2/
-# SDL2_image/SDL2_mixer/zlib to already be linkable -- final linking into
-# libsauerquest.so (pulling in those libs plus the OpenXR frame loop) is
-# Phase 4/5's job, not this one.
+# SDL2_image/SDL2_mixer to already be linkable; now that they are (see
+# above), libsauerquest.so below whole-archives this in as a genuine
+# compile+link correctness check, ahead of Phase 4/5's real OpenXR-loop
+# wiring.
 # ---------------------------------------------------------------------------
 include $(CLEAR_VARS)
 
@@ -72,7 +72,9 @@ LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/$(SAUER_SRC_REL)/engine \
     $(LOCAL_PATH)/$(SAUER_SRC_REL)/fpsgame \
     $(LOCAL_PATH)/$(SAUER_SRC_REL)/enet/include \
-    $(LOCAL_PATH)/$(SAUER_SRC_REL)/include
+    $(LOCAL_PATH)/third_party/SDL2/include \
+    $(LOCAL_PATH)/third_party/SDL2_image/include \
+    $(LOCAL_PATH)/third_party/SDL2_mixer/include
 
 # -fsigned-char: ARM defaults to unsigned char, x86 (what this codebase was
 # always built on before) defaults to signed -- the desktop Makefile forces
@@ -140,3 +142,36 @@ LOCAL_SRC_FILES := \
     $(SAUER_SRC_REL)/fpsgame/weapon.cpp
 
 include $(BUILD_STATIC_LIBRARY)
+
+# ---------------------------------------------------------------------------
+# libsauerquest.so -- Phase 1 (OpenXR bootstrap, still the only thing
+# actually driving the frame loop) + Phase 2 (whole-archives the Sauerbraten
+# engine in purely to prove it links against real SDL2/SDL2_image/
+# SDL2_mixer/enet on-device; nothing calls into it yet -- that's Phase 4/5).
+# ---------------------------------------------------------------------------
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := sauerquest
+LOCAL_LDLIBS := -llog -landroid -lGLESv3 -lEGL -ldl -lz -lOpenSLES
+
+LOCAL_C_INCLUDES := \
+    $(LOCAL_PATH)/openxr_sdk/include \
+    $(LOCAL_PATH)/openxr_sdk/src/common \
+    $(LOCAL_PATH)/vr_glue
+
+LOCAL_SRC_FILES := \
+    vr_glue/TBXR_Common.c \
+    vr_glue/OpenXrInput.c \
+    vr_glue/sauerquest_vr_bootstrap.c
+
+LOCAL_CFLAGS := -Wall -Wno-unused-variable -Wno-unused-function
+
+# sauerengine/enet's own object files aren't referenced by anything in
+# vr_glue yet (Phase 4 wires the OpenXR loop into engine's main()), so a
+# plain LOCAL_STATIC_LIBRARIES would let the linker silently drop them
+# unused -- WHOLE_STATIC_LIBRARIES forces every .o in, which is exactly
+# what a "does the whole engine actually link" check needs.
+LOCAL_WHOLE_STATIC_LIBRARIES := sauerengine enet
+LOCAL_STATIC_LIBRARIES := SDL2_image_static SDL2_mixer_static SDL2_static
+
+include $(BUILD_SHARED_LIBRARY)
