@@ -218,6 +218,25 @@ bool hasext(const char *ext)
     return glexts.access(ext)!=NULL;
 }
 
+// Desktop GL_VERSION/GL_SHADING_LANGUAGE_VERSION strings start with the
+// version number itself (e.g. "3.3.0 NVIDIA 550.xx"), but GLES strings
+// prefix it with "OpenGL ES "/"OpenGL ES GLSL ES " (e.g. "OpenGL ES 3.2
+// ..."), so anchoring the scan at the very start of the string (as a
+// plain `sscanf(str, " %u.%u", ...)` does) only works on desktop -- on
+// GLES it fails to match at all, falling back to glversion=100 and
+// hard-crashing via fatal() below even on a fully capable driver. Scan
+// for the first "<digits>.<digits>" anywhere in the string instead, which
+// handles both formats without needing a platform branch.
+static bool findglversion(const char *str, uint &major, uint &minor)
+{
+    if(!str) return false;
+    for(const char *s = str; *s; s++)
+    {
+        if(isdigit(*s) && sscanf(s, "%u.%u", &major, &minor) == 2) return true;
+    }
+    return false;
+}
+
 void gl_checkextensions()
 {
     const char *vendor = (const char *)glGetString(GL_VENDOR);
@@ -240,7 +259,7 @@ void gl_checkextensions()
         intel = true;
 
     uint glmajorversion, glminorversion;
-    if(sscanf(version, " %u.%u", &glmajorversion, &glminorversion) != 2) glversion = 100;
+    if(!findglversion(version, glmajorversion, glminorversion)) glversion = 100;
     else glversion = glmajorversion*100 + glminorversion*10;
 
     if(glversion < 200) fatal("OpenGL 2.0 or greater is required!");
@@ -369,7 +388,7 @@ void gl_checkextensions()
 
     const char *glslstr = (const char *)glGetString(GL_SHADING_LANGUAGE_VERSION);
     uint glslmajorversion, glslminorversion;
-    if(glslstr && sscanf(glslstr, " %u.%u", &glslmajorversion, &glslminorversion) == 2) glslversion = glslmajorversion*100 + glslminorversion;
+    if(findglversion(glslstr, glslmajorversion, glslminorversion)) glslversion = glslmajorversion*100 + glslminorversion;
 
     if(glslversion < 120) fatal("GLSL 1.20 or greater is required!");
 
