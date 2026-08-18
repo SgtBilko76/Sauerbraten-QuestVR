@@ -1,0 +1,35 @@
+# Prebuilt desktop binaries (large, rebuildable from src/)
+/bin/
+/bin64/
+/bin_unix/
+/sauerbraten.app/
+
+# Large third-party map/asset packages (not versioned; source data for asset scoping in Phase 9)
+/packages/
+
+# Desktop build artifacts
+*.o
+*.obj
+*.gch
+*.pdb
+*.ilk
+*.exe
+*.a
+*.so
+*.dylib
+
+# Android / Gradle / NDK build outputs
+android/**/build/
+android/**/.cxx/
+android/**/.gradle/
+android/local.properties
+android/**/*.apk
+android/**/*.aab
+android/**/obj/
+android/**/libs/
+
+# Editor/OS cruft
+.DS_Store
+Thumbs.db
+.vs/
+.vscode/
