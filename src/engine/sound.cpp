@@ -898,6 +898,13 @@ COMMAND(resetsound, "");
 #include <wchar.h>
 #endif
 
+// Bionic (Android's libc) defines _POSIX_SHARED_MEMORY_OBJECTS but doesn't
+// actually declare shm_open/shm_unlink; Mumble positional-audio linking is
+// irrelevant on a sandboxed Quest app anyway, so just disable this path.
+#ifdef __ANDROID__
+#undef _POSIX_SHARED_MEMORY_OBJECTS
+#endif
+
 #endif
 
 #if defined(WIN32) || defined(_POSIX_SHARED_MEMORY_OBJECTS)
