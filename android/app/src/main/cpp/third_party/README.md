@@ -101,9 +101,38 @@ Each library builds both a shared and a static variant:
 Given the rest of this Android port statically links Sauerbraten's own code
 into a single `libsauerquest.so` (see `../Android.mk`'s `sauerengine`/`enet`
 static-library modules), the `*_static` variants
-(`SDL2_static`/`SDL2_image_static`/`SDL2_mixer_static`) are almost certainly
-the right ones to pull in via `LOCAL_STATIC_LIBRARIES` there, rather than
-shipping separate `.so`s in `jniLibs`.
+(`SDL2_static`/`SDL2_image_static`/`SDL2_mixer_static`) are the right ones
+to pull in via `LOCAL_STATIC_LIBRARIES` there.
+
+**Correction found during Phase 4 integration**: `SDL2_image_static`/
+`SDL2_mixer_static` still pull in `libSDL2.so` as a *shared* runtime
+dependency regardless — there's no `include $(CLEAR_VARS)` between each
+library's `SDL2_image`/`SDL2_mixer` (shared) module block and its
+`_static` variant in their own upstream `Android.mk`, so the static variant
+silently inherits `LOCAL_SHARED_LIBRARIES := SDL2` from the block above it.
+This is upstream's intended design (SDL2 core stays shared even when
+codec libraries are statically linked into the app), not a bug to route
+around. `libSDL2.so` does need shipping in `jniLibs` after all — see
+`../Android.mk`'s `LOCAL_SHARED_LIBRARIES := SDL2` and the
+`copySDL2SharedLib` Gradle task in `../../../../build.gradle`.
+
+## Patch: SDL_android.c's JNI_OnLoad and CheckJNI
+
+`src/core/android/SDL_android.c`'s `JNI_OnLoad` unconditionally calls
+`register_methods()` for `org/libsdl/app/SDLActivity` and three sibling
+classes. This app doesn't ship those classes (its own
+`SauerQuestActivity`/`SauerQuestJNILib` are used instead, not SDL's Java
+glue) — `FindClass` fails as expected, but upstream's `register_methods()`
+only logs the failure and returns *without clearing the pending JNI
+exception*. On a debuggable build (ART's strict CheckJNI mode), making a
+further JNI call (the next class's `FindClass`) while an exception is
+still pending is a fatal, process-aborting violation, not a soft failure
+— so without a fix, the app crashed on every launch. Patched
+`register_methods()` to call `ExceptionClear()` after a failed
+`FindClass`, matching JNI's actual contract. This is a real correctness
+fix (not something specific to this app's setup) that upstream SDL2
+happens to get away with because virtually every SDL2 Android app *does*
+ship `SDLActivity`.
 
 ## Verifying this in isolation
 

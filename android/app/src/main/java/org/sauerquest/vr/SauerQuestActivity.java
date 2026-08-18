@@ -28,10 +28,29 @@ public class SauerQuestActivity extends Activity implements SurfaceHolder.Callba
 	private SurfaceHolder mSurfaceHolder;
 	private long mNativeHandle;
 
+	// SDL2's Android backend (third_party/SDL2/src/core/android/SDL_android.c)
+	// resolves a handful of platform services (storage paths, clipboard,
+	// toast, etc.) via static methods it looks up by name on whatever
+	// Activity class calls its nativeSetupJNI(). Upstream SDL apps get this
+	// for free because they subclass org.libsdl.app.SDLActivity, which
+	// implements the full set; this port uses its own Activity instead, so
+	// nativeSetupJNI() is invoked directly from native code (see
+	// vr_glue/sauerquest_vr_bootstrap.c's onCreate handler) against this
+	// class. getContext() is the one static method actually exercised by
+	// this port's code paths so far (SDL_AndroidGetInternalStoragePath(),
+	// needed by every relative-path file load) -- the many other lookups
+	// SDL_android.c performs against methods this class doesn't implement
+	// are expected to fail (SDL_android.c's nativeSetupJNI clears the
+	// resulting exceptions instead of leaving them pending).
+	private static SauerQuestActivity sInstance;
+	public static android.content.Context getContext() { return sInstance; }
+
 	@Override protected void onCreate(Bundle icicle)
 	{
 		Log.v(TAG, "SauerQuestActivity::onCreate()");
 		super.onCreate(icicle);
+
+		sInstance = this;
 
 		SurfaceView view = new SurfaceView(this);
 		setContentView(view);

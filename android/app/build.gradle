@@ -15,7 +15,14 @@ android {
         externalNativeBuild {
             ndkBuild {
                 def numProcs = Runtime.runtime.availableProcessors()
-                arguments "V=0", "-j$numProcs"
+                // Short absolute NDK_OUT/NDK_LIBS_OUT, appended after AGP's
+                // own (much longer) auto-generated ones -- make's
+                // command-line variable semantics mean the last occurrence
+                // of a VAR=value argument wins, so this overrides them.
+                // See build.gradle's externalNativeBuild.ndkBuild comment
+                // for why (buildStagingDirectory doesn't affect ndk-build's
+                // actual output paths, only CMake's).
+                arguments "V=0", "-j$numProcs", "NDK_OUT=C:/sq_ndkbuild/obj", "NDK_LIBS_OUT=C:/sq_ndkbuild/lib"
                 abiFilters 'arm64-v8a'
             }
         }
@@ -24,6 +31,18 @@ android {
     externalNativeBuild {
         ndkBuild {
             path file('src/main/cpp/Android.mk')
+            // Default intermediates live under a long, deeply-nested path
+            // (android/app/build/intermediates/cxx/Debug/<hash>/...). With
+            // ~470 SDL2 source files alone, the resulting `ar` command
+            // line to build libSDL2.a blows past Windows' CreateProcess
+            // argument length limit (silent-ish "process_begin:
+            // CreateProcess(...) ... Error 2" failure). buildStagingDirectory
+            // is AGP's own documented fix: it relocates .cxx intermediates
+            // to a short path AGP itself tracks, so this is safe (unlike
+            // overriding NDK_OUT/NDK_LIBS_OUT directly via extra ndk-build
+            // `arguments`, which AGP's own packaging step wouldn't know
+            // about).
+            buildStagingDirectory "C:/sq_ndkbuild"
         }
     }
 
@@ -41,6 +60,7 @@ android {
     sourceSets {
         main {
             jniLibs.srcDir "$buildDir/generated/openxr-loader/jniLibs"
+            jniLibs.srcDir "$buildDir/generated/sdl2-shared/jniLibs"
         }
     }
 
@@ -81,4 +101,38 @@ tasks.register("extractOpenXrLoader", Copy) {
 
 tasks.named("preBuild").configure {
     dependsOn("extractOpenXrLoader")
+}
+
+// libSDL2.so is a *build output* of our own ndk-build (SDL2_image_static/
+// SDL2_mixer_static inherit LOCAL_SHARED_LIBRARIES := SDL2 from upstream
+// SDL2_image/SDL2_mixer's Android.mk -- see the main Android.mk's comment
+// on this), unlike the prebuilt OpenXR loader AAR above, so it doesn't
+// exist until buildNdkBuildDebug has actually run -- this can't be hooked
+// into preBuild the way extractOpenXrLoader is. It lands in
+// NDK_OUT/local/arm64-v8a (the relocated C:/sq_ndkbuild path set via
+// externalNativeBuild.ndkBuild.arguments above, needed to dodge Windows'
+// CreateProcess argument-length limit on SDL2's own ~470-file `ar`
+// invocation), which AGP's own native-lib packaging doesn't know to look
+// in since it's outside the paths AGP itself manages -- stage it into a
+// normal jniLibs.srcDir instead, ordered explicitly after the native
+// build and before native-lib merging.
+tasks.register("copySDL2SharedLib", Copy) {
+    dependsOn("buildNdkBuildDebug")
+    from("C:/sq_ndkbuild/obj/local/arm64-v8a") {
+        include "libSDL2.so"
+    }
+    into "$buildDir/generated/sdl2-shared/jniLibs/arm64-v8a"
+}
+
+// AGP registers its variant-specific native-lib-merge tasks lazily, only
+// visible after the project has finished evaluating -- tasks.named()
+// needs afterEvaluate here, unlike the preBuild hook above (a task Gradle
+// itself always creates up front).
+afterEvaluate {
+    tasks.named("mergeDebugNativeLibs").configure {
+        dependsOn("copySDL2SharedLib")
+    }
+    tasks.named("mergeDebugJniLibFolders").configure {
+        dependsOn("copySDL2SharedLib")
+    }
 }

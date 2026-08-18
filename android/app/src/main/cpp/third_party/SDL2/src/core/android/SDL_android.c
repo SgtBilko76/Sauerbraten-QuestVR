@@ -508,6 +508,17 @@ static void register_methods(JNIEnv *env, const char *classname, JNINativeMethod
     jclass clazz = (*env)->FindClass(env, classname);
     if (!clazz || (*env)->RegisterNatives(env, clazz, methods, nb) < 0) {
         __android_log_print(ANDROID_LOG_ERROR, "SDL", "Failed to register methods of %s", classname);
+        /* SauerQuest patch: upstream doesn't clear the pending exception a
+         * failed FindClass() leaves behind. That's harmless in itself, but
+         * apps (like this one) that don't ship org/libsdl/app/SDLActivity
+         * at all -- we use our own Activity, not SDL's -- call this in a
+         * loop for several SDLActivity/SDLInputConnection/... classes in a
+         * row, and ART's strict JNI checking (active on debuggable builds)
+         * aborts the process the moment the *next* JNI call sees a pending
+         * exception. See android/app/src/main/cpp/third_party/README.md. */
+        if ((*env)->ExceptionCheck(env)) {
+            (*env)->ExceptionClear(env);
+        }
         return;
     }
 }
@@ -552,6 +563,22 @@ JNIEXPORT jstring JNICALL SDL_JAVA_INTERFACE(nativeGetVersion)(JNIEnv *env, jcla
     return (*env)->NewStringUTF(env, version);
 }
 
+/* SauerQuest patch: like register_methods()'s exception-clearing above, but
+ * for method *lookups*. mActivityClass below is our own SauerQuestActivity
+ * (see sauerquest_vr_bootstrap.c's onCreate handler), which only implements
+ * getContext() of the ~30 static methods nativeSetupJNI() resolves here --
+ * every other GetStaticMethodID() call is expected to fail with a
+ * NoSuchMethodError, and CheckJNI aborts the *next* JNI call if that
+ * exception is left pending instead of cleared. */
+static jmethodID safe_get_static_method_id(JNIEnv *env, jclass cls, const char *name, const char *sig)
+{
+    jmethodID mid = (*env)->GetStaticMethodID(env, cls, name, sig);
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+    }
+    return mid;
+}
+
 /* Activity initialization -- called before SDL_main() to initialize JNI bindings */
 JNIEXPORT void JNICALL SDL_JAVA_INTERFACE(nativeSetupJNI)(JNIEnv *env, jclass cls)
 {
@@ -593,36 +620,36 @@ JNIEXPORT void JNICALL SDL_JAVA_INTERFACE(nativeSetupJNI)(JNIEnv *env, jclass cl
 
     mActivityClass = (jclass)((*env)->NewGlobalRef(env, cls));
 
-    midClipboardGetText = (*env)->GetStaticMethodID(env, mActivityClass, "clipboardGetText", "()Ljava/lang/String;");
-    midClipboardHasText = (*env)->GetStaticMethodID(env, mActivityClass, "clipboardHasText", "()Z");
-    midClipboardSetText = (*env)->GetStaticMethodID(env, mActivityClass, "clipboardSetText", "(Ljava/lang/String;)V");
-    midCreateCustomCursor = (*env)->GetStaticMethodID(env, mActivityClass, "createCustomCursor", "([IIIII)I");
-    midDestroyCustomCursor = (*env)->GetStaticMethodID(env, mActivityClass, "destroyCustomCursor", "(I)V");
-    midGetContext = (*env)->GetStaticMethodID(env, mActivityClass, "getContext", "()Landroid/content/Context;");
-    midGetDisplayDPI = (*env)->GetStaticMethodID(env, mActivityClass, "getDisplayDPI", "()Landroid/util/DisplayMetrics;");
-    midGetManifestEnvironmentVariables = (*env)->GetStaticMethodID(env, mActivityClass, "getManifestEnvironmentVariables", "()Z");
-    midGetNativeSurface = (*env)->GetStaticMethodID(env, mActivityClass, "getNativeSurface", "()Landroid/view/Surface;");
-    midInitTouch = (*env)->GetStaticMethodID(env, mActivityClass, "initTouch", "()V");
-    midIsAndroidTV = (*env)->GetStaticMethodID(env, mActivityClass, "isAndroidTV", "()Z");
-    midIsChromebook = (*env)->GetStaticMethodID(env, mActivityClass, "isChromebook", "()Z");
-    midIsDeXMode = (*env)->GetStaticMethodID(env, mActivityClass, "isDeXMode", "()Z");
-    midIsScreenKeyboardShown = (*env)->GetStaticMethodID(env, mActivityClass, "isScreenKeyboardShown", "()Z");
-    midIsTablet = (*env)->GetStaticMethodID(env, mActivityClass, "isTablet", "()Z");
-    midManualBackButton = (*env)->GetStaticMethodID(env, mActivityClass, "manualBackButton", "()V");
-    midMinimizeWindow = (*env)->GetStaticMethodID(env, mActivityClass, "minimizeWindow", "()V");
-    midOpenURL = (*env)->GetStaticMethodID(env, mActivityClass, "openURL", "(Ljava/lang/String;)I");
-    midRequestPermission = (*env)->GetStaticMethodID(env, mActivityClass, "requestPermission", "(Ljava/lang/String;I)V");
-    midShowToast = (*env)->GetStaticMethodID(env, mActivityClass, "showToast", "(Ljava/lang/String;IIII)I");
-    midSendMessage = (*env)->GetStaticMethodID(env, mActivityClass, "sendMessage", "(II)Z");
-    midSetActivityTitle = (*env)->GetStaticMethodID(env, mActivityClass, "setActivityTitle", "(Ljava/lang/String;)Z");
-    midSetCustomCursor = (*env)->GetStaticMethodID(env, mActivityClass, "setCustomCursor", "(I)Z");
-    midSetOrientation = (*env)->GetStaticMethodID(env, mActivityClass, "setOrientation", "(IIZLjava/lang/String;)V");
-    midSetRelativeMouseEnabled = (*env)->GetStaticMethodID(env, mActivityClass, "setRelativeMouseEnabled", "(Z)Z");
-    midSetSystemCursor = (*env)->GetStaticMethodID(env, mActivityClass, "setSystemCursor", "(I)Z");
-    midSetWindowStyle = (*env)->GetStaticMethodID(env, mActivityClass, "setWindowStyle", "(Z)V");
-    midShouldMinimizeOnFocusLoss = (*env)->GetStaticMethodID(env, mActivityClass, "shouldMinimizeOnFocusLoss", "()Z");
-    midShowTextInput = (*env)->GetStaticMethodID(env, mActivityClass, "showTextInput", "(IIII)Z");
-    midSupportsRelativeMouse = (*env)->GetStaticMethodID(env, mActivityClass, "supportsRelativeMouse", "()Z");
+    midClipboardGetText = safe_get_static_method_id(env, mActivityClass, "clipboardGetText", "()Ljava/lang/String;");
+    midClipboardHasText = safe_get_static_method_id(env, mActivityClass, "clipboardHasText", "()Z");
+    midClipboardSetText = safe_get_static_method_id(env, mActivityClass, "clipboardSetText", "(Ljava/lang/String;)V");
+    midCreateCustomCursor = safe_get_static_method_id(env, mActivityClass, "createCustomCursor", "([IIIII)I");
+    midDestroyCustomCursor = safe_get_static_method_id(env, mActivityClass, "destroyCustomCursor", "(I)V");
+    midGetContext = safe_get_static_method_id(env, mActivityClass, "getContext", "()Landroid/content/Context;");
+    midGetDisplayDPI = safe_get_static_method_id(env, mActivityClass, "getDisplayDPI", "()Landroid/util/DisplayMetrics;");
+    midGetManifestEnvironmentVariables = safe_get_static_method_id(env, mActivityClass, "getManifestEnvironmentVariables", "()Z");
+    midGetNativeSurface = safe_get_static_method_id(env, mActivityClass, "getNativeSurface", "()Landroid/view/Surface;");
+    midInitTouch = safe_get_static_method_id(env, mActivityClass, "initTouch", "()V");
+    midIsAndroidTV = safe_get_static_method_id(env, mActivityClass, "isAndroidTV", "()Z");
+    midIsChromebook = safe_get_static_method_id(env, mActivityClass, "isChromebook", "()Z");
+    midIsDeXMode = safe_get_static_method_id(env, mActivityClass, "isDeXMode", "()Z");
+    midIsScreenKeyboardShown = safe_get_static_method_id(env, mActivityClass, "isScreenKeyboardShown", "()Z");
+    midIsTablet = safe_get_static_method_id(env, mActivityClass, "isTablet", "()Z");
+    midManualBackButton = safe_get_static_method_id(env, mActivityClass, "manualBackButton", "()V");
+    midMinimizeWindow = safe_get_static_method_id(env, mActivityClass, "minimizeWindow", "()V");
+    midOpenURL = safe_get_static_method_id(env, mActivityClass, "openURL", "(Ljava/lang/String;)I");
+    midRequestPermission = safe_get_static_method_id(env, mActivityClass, "requestPermission", "(Ljava/lang/String;I)V");
+    midShowToast = safe_get_static_method_id(env, mActivityClass, "showToast", "(Ljava/lang/String;IIII)I");
+    midSendMessage = safe_get_static_method_id(env, mActivityClass, "sendMessage", "(II)Z");
+    midSetActivityTitle = safe_get_static_method_id(env, mActivityClass, "setActivityTitle", "(Ljava/lang/String;)Z");
+    midSetCustomCursor = safe_get_static_method_id(env, mActivityClass, "setCustomCursor", "(I)Z");
+    midSetOrientation = safe_get_static_method_id(env, mActivityClass, "setOrientation", "(IIZLjava/lang/String;)V");
+    midSetRelativeMouseEnabled = safe_get_static_method_id(env, mActivityClass, "setRelativeMouseEnabled", "(Z)Z");
+    midSetSystemCursor = safe_get_static_method_id(env, mActivityClass, "setSystemCursor", "(I)Z");
+    midSetWindowStyle = safe_get_static_method_id(env, mActivityClass, "setWindowStyle", "(Z)V");
+    midShouldMinimizeOnFocusLoss = safe_get_static_method_id(env, mActivityClass, "shouldMinimizeOnFocusLoss", "()Z");
+    midShowTextInput = safe_get_static_method_id(env, mActivityClass, "showTextInput", "(IIII)Z");
+    midSupportsRelativeMouse = safe_get_static_method_id(env, mActivityClass, "supportsRelativeMouse", "()Z");
 
     if (!midClipboardGetText ||
         !midClipboardHasText ||

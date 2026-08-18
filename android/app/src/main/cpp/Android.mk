@@ -158,7 +158,8 @@ LOCAL_LDLIBS := -llog -landroid -lGLESv3 -lEGL -ldl -lz -lOpenSLES
 LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/openxr_sdk/include \
     $(LOCAL_PATH)/openxr_sdk/src/common \
-    $(LOCAL_PATH)/vr_glue
+    $(LOCAL_PATH)/vr_glue \
+    $(LOCAL_PATH)/$(SAUER_SRC_REL)/engine
 
 LOCAL_SRC_FILES := \
     vr_glue/TBXR_Common.c \
@@ -167,12 +168,21 @@ LOCAL_SRC_FILES := \
 
 LOCAL_CFLAGS := -Wall -Wno-unused-variable -Wno-unused-function
 
-# sauerengine/enet's own object files aren't referenced by anything in
-# vr_glue yet (Phase 4 wires the OpenXR loop into engine's main()), so a
-# plain LOCAL_STATIC_LIBRARIES would let the linker silently drop them
-# unused -- WHOLE_STATIC_LIBRARIES forces every .o in, which is exactly
-# what a "does the whole engine actually link" check needs.
+# Phase 4: sauerquest_vr_bootstrap.c now calls into the engine
+# (android_sauer_main/tick/drawframe/endframe, via androidbridge.h) every
+# frame, so sauerengine/enet's object files are genuinely referenced --
+# WHOLE_STATIC_LIBRARIES is kept anyway since it's still correct (and
+# harmless) now that real references exist too.
 LOCAL_WHOLE_STATIC_LIBRARIES := sauerengine enet
 LOCAL_STATIC_LIBRARIES := SDL2_image_static SDL2_mixer_static SDL2_static
+# SDL2_image_static/SDL2_mixer_static inherit LOCAL_SHARED_LIBRARIES :=
+# SDL2 from their sibling shared-module block in the vendored Android.mk
+# (there's no CLEAR_VARS between the "SDL2_image"/"SDL2_mixer" shared
+# modules and their "_static" variants -- this is upstream SDL2_image/
+# SDL2_mixer's own intended design: SDL2 core stays a shared library even
+# when the codec libraries are statically linked into the app). Declaring
+# it here too makes both the linker AND Gradle's native-lib packaging
+# step aware libSDL2.so needs to end up in the APK's jniLibs.
+LOCAL_SHARED_LIBRARIES := SDL2
 
 include $(BUILD_SHARED_LIBRARY)
