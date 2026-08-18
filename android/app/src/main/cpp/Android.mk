@@ -85,6 +85,7 @@ LOCAL_CPPFLAGS := -fsigned-char -fno-exceptions -fno-rtti -Wall \
     -Wno-reorder
 
 LOCAL_SRC_FILES := \
+    $(SAUER_SRC_REL)/engine/glescompat.cpp \
     $(SAUER_SRC_REL)/shared/crypto.cpp \
     $(SAUER_SRC_REL)/shared/geom.cpp \
     $(SAUER_SRC_REL)/shared/glemu.cpp \
