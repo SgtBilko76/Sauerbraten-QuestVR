@@ -41,6 +41,25 @@ void android_sauer_endframe(void);
 // it's called.
 void android_get_eye_size(int *w, int *h);
 
+// Implemented in rendergl.cpp; called once per eye, immediately before
+// android_sauer_drawframe(), to report that eye's real OpenXR pose/FOV
+// for this frame. setcammatrix()/gl_drawframe() read these (instead of
+// camera1's mouse-driven yaw/pitch/roll and the fov cvar) on Android.
+//   dx/dy/dz: eye position offset from the head, in Sauerbraten's own
+//     "quake style" world axes (already remapped from OpenXR's Y-up axes
+//     by the caller, matching hmdorientation's convention) and in real
+//     *meters*, not world units -- scaled by the vrworldscale cvar on
+//     this side so it's runtime-tunable without a rebuild.
+//   yaw/pitch/roll: degrees, Sauerbraten's convention (this is head
+//     orientation, shared by both eyes -- eyes don't rotate
+//     independently of the head in this rig, only position differs).
+//   tanLeft/tanRight/tanUp/tanDown: tan() of the per-eye asymmetric FOV
+//     angles from xrLocateViews, i.e. already in the form
+//     matrix4::frustum() needs once multiplied by the near clip plane.
+void android_sauer_set_eye(float dx, float dy, float dz,
+                            float yaw, float pitch, float roll,
+                            float tanLeft, float tanRight, float tanUp, float tanDown);
+
 #ifdef __cplusplus
 }
 #endif
