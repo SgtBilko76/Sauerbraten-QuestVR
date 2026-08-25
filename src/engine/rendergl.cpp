@@ -4,6 +4,7 @@
 
 #ifdef __ANDROID__
 #include <dlfcn.h>
+#include "androidbridge.h"
 #endif
 
 bool hasVAO = false, hasFBO = false, hasAFBO = false, hasDS = false, hasTF = false, hasTRG = false, hasTSW = false, hasS3TC = false, hasFXT1 = false, hasLATC = false, hasRGTC = false, hasAF = false, hasFBB = false, hasUBO = false, hasMBR = false;
@@ -700,14 +701,71 @@ ICOMMAND(getcampos, "", (),
 
 vec worldpos, camdir, camright, camup;
 
+#ifdef __ANDROID__
+// Per-eye pose/FOV for the eye about to be rendered, set by
+// android_sauer_set_eye() (called from vr_glue/sauerquest_vr_bootstrap.c's
+// per-eye loop) immediately before android_sauer_drawframe(). See the
+// project plan's stereo-rendering phase and androidbridge.h's comment on
+// android_sauer_set_eye() for the exact units/convention of each field.
+static vec androidEyeOffsetMeters(0, 0, 0);
+static float androidEyeYaw = 0, androidEyePitch = 0, androidEyeRoll = 0;
+static float androidEyeTanL = -1, androidEyeTanR = 1, androidEyeTanU = 1, androidEyeTanD = -1;
+
+// units-per-meter converting OpenXR's real-world tracked motion into
+// Sauerbraten world units -- rough estimate from the default player
+// capsule (ents.h: eyeheight=14, radius=4.1 units, plausible for a
+// ~1.6-1.7m/~0.3-0.4m human), exposed as a cvar since getting this exactly
+// right needs on-device tuning ("does leaning a real 10cm forward move
+// the view a sensible amount"), not something derivable purely from
+// source.
+VARP(vrworldscale, 1, 10, 1000);
+
+void android_sauer_set_eye(float dx, float dy, float dz,
+                            float yaw, float pitch, float roll,
+                            float tanLeft, float tanRight, float tanUp, float tanDown)
+{
+    androidEyeOffsetMeters = vec(dx, dy, dz);
+    androidEyeYaw = yaw;
+    androidEyePitch = pitch;
+    androidEyeRoll = roll;
+    androidEyeTanL = tanLeft;
+    androidEyeTanR = tanRight;
+    androidEyeTanU = tanUp;
+    androidEyeTanD = tanDown;
+}
+#endif
+
 void setcammatrix()
 {
     // move from RH to Z-up LH quake style worldspace
     cammatrix = viewmatrix;
+#ifdef __ANDROID__
+    // Head orientation drives the view directly (absolute, not the
+    // mouse-delta accumulation mousemove() normally does -- see
+    // main.cpp's checkinput(), never called on Android since there's no
+    // SDL window generating mouse-motion events to begin with). Also
+    // mirror it onto camera1 itself so other code that reads
+    // camera1->yaw/pitch/roll directly (not just this function) sees the
+    // same head-tracked values -- e.g. the crosshair raycast a few lines
+    // down, and drawhudmodel()'s viewmodel orientation, until Phase 6
+    // replaces both with the controller's own transform.
+    camera1->yaw = androidEyeYaw;
+    camera1->pitch = androidEyePitch;
+    camera1->roll = androidEyeRoll;
+    cammatrix.rotate_around_y(androidEyeRoll*RAD);
+    cammatrix.rotate_around_x(androidEyePitch*-RAD);
+    cammatrix.rotate_around_z(androidEyeYaw*-RAD);
+    // camera1->o is the player's logical/gameplay position (movement,
+    // collision -- untouched here); the per-eye positional offset from
+    // real head tracking is added only to the render-camera translation,
+    // the same "body root + head-relative offset" split most VR rigs use.
+    cammatrix.translate(vec(camera1->o).add(vec(androidEyeOffsetMeters).mul(float(vrworldscale))).neg());
+#else
     cammatrix.rotate_around_y(camera1->roll*RAD);
     cammatrix.rotate_around_x(camera1->pitch*-RAD);
     cammatrix.rotate_around_z(camera1->yaw*-RAD);
     cammatrix.translate(vec(camera1->o).neg());
+#endif
 
     cammatrix.transposedtransformnormal(vec(viewmatrix.b), camdir);
     cammatrix.transposedtransformnormal(vec(viewmatrix.a).neg(), camright);
@@ -1963,7 +2021,16 @@ void gl_drawframe()
 
     farplane = worldsize*2;
 
+#ifdef __ANDROID__
+    // Real per-eye asymmetric FOV from xrLocateViews (android_sauer_set_eye(),
+    // called once per eye just before this function) instead of the
+    // symmetric fov-cvar-derived frustum desktop/mouse-look uses.
+    projmatrix.frustum(nearplane*androidEyeTanL, nearplane*androidEyeTanR,
+                        nearplane*androidEyeTanD, nearplane*androidEyeTanU,
+                        nearplane, farplane);
+#else
     projmatrix.perspective(fovy, aspect, nearplane, farplane);
+#endif
     setcamprojmatrix();
 
     glEnable(GL_CULL_FACE);

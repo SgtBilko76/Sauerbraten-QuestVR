@@ -183,6 +183,31 @@ void *AppThreadFunction(void *parm)
         for (int eye = 0; eye < ovrMaxNumEyes; eye++) {
             TBXR_prepareEyeBuffer(eye);
             if (gAppState.FrameState.shouldRender) {
+                /* gAppState.Projections[eye].pose is the eye relative to
+                 * HeadSpace (a small IPD-driven offset only -- eyes don't
+                 * rotate independently of the head); compose with the
+                 * head's own absolute pose (already updated this frame by
+                 * TBXR_FrameSetup() -> TBXR_GetHMDOrientation(), the same
+                 * call that populates hmdorientation[] below) to get the
+                 * eye's real position in world/stage space. Mirrors
+                 * TBXR_submitFrame()'s identical composition internally. */
+                XrPosef xfHeadFromEye = gAppState.Projections[eye].pose;
+                XrPosef xfStageFromEye = XrPosef_Multiply(gAppState.xfStageFromHead, xfHeadFromEye);
+                XrFovf fov = gAppState.Projections[eye].fov;
+
+                /* OpenXR is Y-up/right-handed (+X right, +Y up, -Z
+                 * forward). Remap into Sauerbraten's "quake style" world
+                 * axes with the same {-z,-x,y} convention
+                 * QuatToYawPitchRoll() above already uses for
+                 * hmdorientation, so position and orientation stay in a
+                 * consistent frame relative to each other. */
+                float dx = -xfStageFromEye.position.z;
+                float dy = -xfStageFromEye.position.x;
+                float dz =  xfStageFromEye.position.y;
+
+                android_sauer_set_eye(dx, dy, dz,
+                    hmdorientation[1], hmdorientation[0], hmdorientation[2],
+                    tanf(fov.angleLeft), tanf(fov.angleRight), tanf(fov.angleUp), tanf(fov.angleDown));
                 android_sauer_drawframe();
             }
             TBXR_finishEyeBuffer(eye);
