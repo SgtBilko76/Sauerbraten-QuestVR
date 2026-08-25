@@ -1184,7 +1184,7 @@ bool g3d_input(const char *str, int len)
 {
     editor *e = currentfocus();
     if(fieldmode == FIELDKEY || fieldmode == FIELDSHOW || !e) return false;
-    
+
     e->input(str, len);
     return true;
 }
@@ -1302,6 +1302,33 @@ void g3d_setcursorpos(float x, float y)
     cursorx = max(0.0f, min(1.0f, x));
     cursory = max(0.0f, min(1.0f, y));
 }
+
+// Programmatic counterpart to field_()'s own click-to-focus handling
+// (useeditor(name, mode, true) plus setting fieldmode, a few lines up in
+// this file) -- the existing textfocus command (textedit.h) only does
+// the former, so typed input still gets rejected by g3d_input()'s
+// `fieldmode == FIELDSHOW` check. Used by the in-VR virtual keyboard
+// (data/menus/vkeyboard.cfg) to focus the name field the moment its
+// screen opens, since clicking a key isn't itself a click on the field.
+void g3d_focusfield(char *name)
+{
+    useeditor(name, EDITORFOCUSED, true);
+    editor *e = currentfocus();
+    if(e) e->mark(false);
+    fieldmode = FIELDEDIT;
+    // g3d_render()'s own end-of-frame safety net (`if(!fieldsactive)
+    // fieldmode = FIELDSHOW`, meant to drop focus when a menu with no
+    // fields at all is showing) would otherwise undo the fieldmode set
+    // above on every frame: field_()'s *own* "not committing" branch is
+    // the only other place that sets fieldsactive true, and that branch
+    // requires the cursor to be hovering the field itself (`hit`) --
+    // never true here while the pointer is aimed at a keyboard key
+    // elsewhere on the same screen (confirmed on-device: fieldmode kept
+    // reading back as FIELDSHOW at click time despite this function
+    // running every frame, until fieldsactive was set here too).
+    fieldsactive = true;
+}
+COMMAND(g3d_focusfield, "s");
 
 VARNP(guifollow, useguifollow, 0, 1, 1);
 VARNP(gui2d, usegui2d, 0, 1, 1);
