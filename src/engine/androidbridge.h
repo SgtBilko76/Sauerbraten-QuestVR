@@ -83,6 +83,24 @@ int android_sauer_is_mainmenu(void);
 void android_sauer_set_cursor(float x, float y);
 void android_sauer_click(int isdown);
 
+// Implemented in rendergl.cpp; reports the right controller's current
+// aim pose, decoupling weapon aiming/shooting from head direction (the
+// confirmed scope for this port -- see androidgetaim() in iengine.h,
+// which is what actually reads this to drive the shoot raycast and
+// viewmodel orientation). Same conventions as android_sauer_set_eye():
+// dx/dy/dz is the controller's position offset from the head in real
+// meters (Sauerbraten world axes), yaw/pitch/roll in degrees. active=0
+// means the controller isn't currently tracked.
+void android_sauer_set_aim(float dx, float dy, float dz,
+                            float yaw, float pitch, float roll, int active);
+
+// Implemented in main.cpp; maps the right controller's trigger to the
+// same fire input desktop's left mouse button gives (physics.cpp's
+// `attack` ICOMMAND -> game::doattack()). Only meaningful during actual
+// gameplay -- the native frame loop uses android_sauer_is_mainmenu() to
+// decide whether a trigger press should be this or a GUI click instead.
+void android_sauer_fire(int isdown);
+
 #ifdef __cplusplus
 }
 #endif

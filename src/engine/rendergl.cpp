@@ -733,6 +733,56 @@ void android_sauer_set_eye(float dx, float dy, float dz,
     androidEyeTanU = tanUp;
     androidEyeTanD = tanDown;
 }
+
+// Right controller's current aim pose, set once per frame by
+// android_sauer_set_aim() (sauerquest_vr_bootstrap.c) -- decouples
+// weapon aiming/shooting from head direction (the confirmed scope for
+// this port). Same head-relative-offset-in-meters convention as
+// androidEyeOffsetMeters above.
+static vec androidAimOffsetMeters(0, 0, 0);
+static float androidAimYaw = 0, androidAimPitch = 0, androidAimRoll = 0;
+static bool androidAimActive = false;
+
+void android_sauer_set_aim(float dx, float dy, float dz,
+                            float yaw, float pitch, float roll, int active)
+{
+    androidAimOffsetMeters = vec(dx, dy, dz);
+    androidAimYaw = yaw;
+    androidAimPitch = pitch;
+    androidAimRoll = roll;
+    androidAimActive = active != 0;
+}
+
+// Resolves the controller's head-relative offset into a world-space
+// position/direction, exactly the same "rotate a head-local offset by
+// camera1's current yaw/pitch/roll, then scale by vrworldscale and add
+// to camera1->o" technique setcammatrix() uses for the per-eye render
+// position a few lines down -- kept as its own function (rather than
+// reusing cammatrix directly) since callers of this (drawhudmodel() in
+// fpsgame/render.cpp, via iengine.h) run well after cammatrix has
+// translation baked into it, not just rotation. Returns false (leaving
+// pos/dir/yaw/pitch untouched) on desktop or when the controller isn't
+// currently tracked, so callers can fall back to head-aim unconditionally.
+bool androidgetaim(vec &pos, vec &dir, float &yaw, float &pitch)
+{
+    if(!androidAimActive) return false;
+    matrix4 headrot;
+    headrot.identity();
+    headrot.rotate_around_y(camera1->roll*RAD);
+    headrot.rotate_around_x(camera1->pitch*-RAD);
+    headrot.rotate_around_z(camera1->yaw*-RAD);
+    vec offsetWorld;
+    headrot.transposedtransformnormal(androidAimOffsetMeters, offsetWorld);
+    pos = vec(camera1->o).add(offsetWorld.mul(float(vrworldscale)));
+    yaw = androidAimYaw;
+    pitch = androidAimPitch;
+    vecfromyawpitch(yaw, pitch, 1, 0, dir);
+    return true;
+}
+#else
+// Desktop stub -- fpsgame/render.cpp's drawhudmodel() calls this
+// unconditionally (see iengine.h), always falling back to head-aim here.
+bool androidgetaim(vec &pos, vec &dir, float &yaw, float &pitch) { return false; }
 #endif
 
 void setcammatrix()
@@ -819,8 +869,18 @@ void setcammatrix()
 
     if(!drawtex)
     {
-        if(raycubepos(camera1->o, camdir, worldpos, 0, RAY_CLIPMAT|RAY_SKIPFIRST) == -1)
-            worldpos = vec(camdir).mul(2*worldsize).add(camera1->o); // if nothing is hit, just far away in the view direction
+        // The shoot/crosshair target: head-aimed by default, but the
+        // right controller's own aim pose (decoupled from head
+        // direction -- this port's confirmed scope for weapon aiming)
+        // takes over when tracked. androidgetaim() leaves these
+        // untouched (returning false) on desktop or when the controller
+        // isn't currently tracked, so this is a single code path for
+        // both platforms.
+        vec aimorigin = camera1->o, aimdir = camdir;
+        float aimyaw, aimpitch;
+        androidgetaim(aimorigin, aimdir, aimyaw, aimpitch);
+        if(raycubepos(aimorigin, aimdir, worldpos, 0, RAY_CLIPMAT|RAY_SKIPFIRST) == -1)
+            worldpos = vec(aimdir).mul(2*worldsize).add(aimorigin); // if nothing is hit, just far away in the aim direction
     }
 }
 

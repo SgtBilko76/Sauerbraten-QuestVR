@@ -585,3 +585,12 @@ extern void g3d_cursorpos(float &x, float &y);
 extern void g3d_resetcursor();
 extern void g3d_limitscale(float scale);
 
+// rendergl.cpp; resolves the right controller's current aim pose (set by
+// android_sauer_set_aim(), androidbridge.h) into a world-space
+// position/direction/yaw/pitch. Returns false (args untouched) on
+// desktop or when the controller isn't tracked, so callers can always
+// fall back to head-aim unconditionally, e.g.:
+//   vec pos = fallbackpos, dir = fallbackdir; float yaw, pitch;
+//   if(androidgetaim(pos, dir, yaw, pitch)) { ...use controller aim... }
+extern bool androidgetaim(vec &pos, vec &dir, float &yaw, float &pitch);
+

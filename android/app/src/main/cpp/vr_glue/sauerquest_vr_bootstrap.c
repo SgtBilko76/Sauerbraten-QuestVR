@@ -241,11 +241,63 @@ static void SauerQuest_UpdateMenuPointer(void)
     }
 }
 
+/* Controller-aimed weapon (decoupled from head direction -- this port's
+ * confirmed scope for aiming). Reports the right controller's pose,
+ * head-relative like android_sauer_set_eye()'s own eye offset, so
+ * androidgetaim() (rendergl.cpp, via iengine.h) can resolve it into
+ * world space the exact same way: rotate by camera1's *current*
+ * yaw/pitch/roll rather than baking in today's head orientation here,
+ * so this keeps working once body-yaw/locomotion decouples camera1's
+ * yaw from raw head yaw (not yet the case -- no locomotion exists yet). */
+static void SauerQuest_UpdateWeaponAim(void)
+{
+    if (!rightRemoteTracking_new.Active) {
+        android_sauer_set_aim(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0);
+        return;
+    }
+
+    XrPosef xfHeadFromController = XrPosef_Multiply(
+        XrPosef_Inverse(gAppState.xfStageFromHead),
+        rightRemoteTracking_new.Pose);
+
+    /* Same {-x,-z,y} -> Sauerbraten {lateral,forward,up} remap as the
+     * eye offset (rendergl.cpp's android_sauer_set_eye() comment) --
+     * NOT the {-z,-x,y} convention TBXR's own QuatToYawPitchRoll() uses,
+     * which is Quake/DarkPlaces's axis order, not Cube2's. */
+    float dx = -xfHeadFromController.position.x;
+    float dy = -xfHeadFromController.position.z;
+    float dz =  xfHeadFromController.position.y;
+
+    vec3_t rotation = {0.0f, 0.0f, 0.0f};
+    vec3_t aimAngles;
+    QuatToYawPitchRoll(rightRemoteTracking_new.Pose.orientation, rotation, aimAngles);
+
+    android_sauer_set_aim(dx, dy, dz, aimAngles[1], aimAngles[0], aimAngles[2], 1);
+}
+
+static void SauerQuest_UpdateWeaponFire(void)
+{
+    static bool triggerWasDown = false;
+
+    if (android_sauer_is_mainmenu()) {
+        triggerWasDown = false; /* don't carry a stale fire-hold into the menu */
+        return;
+    }
+
+    bool triggerDown = (rightTrackedRemoteState_new.Buttons & xrButton_Trigger) != 0;
+    if (triggerDown != triggerWasDown) {
+        android_sauer_fire(triggerDown ? 1 : 0);
+        triggerWasDown = triggerDown;
+    }
+}
+
 void VR_HandleControllerInput(void)
 {
     SauerQuest_UpdateMenuScreenAnchor();
     TBXR_UpdateControllers();
     SauerQuest_UpdateMenuPointer();
+    SauerQuest_UpdateWeaponAim();
+    SauerQuest_UpdateWeaponFire();
 }
 
 void VR_Shutdown(void)

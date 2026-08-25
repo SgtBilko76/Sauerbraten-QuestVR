@@ -12,6 +12,25 @@
 #include "texture.h"
 #include "model.h"
 
+#ifdef __ANDROID__
+// Implemented in vr_glue/TBXR_Common.c: the GL framebuffer object currently
+// bound as the active OpenXR eye swapchain target. Unlike desktop (where
+// framebuffer object 0 genuinely *is* the window), this Android build
+// renders into a named FBO managed by TBXR -- 0 refers to nothing the XR
+// compositor ever sees. Any code that does an off-screen render-to-texture
+// pass (water reflections, glare/depth-fx targets, multi-pass postfx) and
+// then "restores the screen" afterward must bind back to this, not a
+// hardcoded 0, or every draw call for the rest of that eye's frame silently
+// goes to a framebuffer nobody displays -- confirmed on-device as the cause
+// of gameplay rendering to a totally black screen (audio/input still
+// worked; only output was affected) despite the menu, which never takes any
+// off-screen render-to-texture path, always displaying correctly.
+extern "C" unsigned int android_sauer_get_default_framebuffer(void);
+static inline GLuint defaultfb() { return (GLuint)android_sauer_get_default_framebuffer(); }
+#else
+static inline GLuint defaultfb() { return 0; }
+#endif
+
 extern dynent *player;
 extern physent *camera1;                // special ent that acts as camera, same object as player1 in FPS mode
 

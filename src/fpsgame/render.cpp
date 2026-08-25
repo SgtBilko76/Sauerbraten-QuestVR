@@ -414,6 +414,23 @@ namespace game
         sway.add(swaydir).add(d->o);
         if(!hudgunsway) sway = d->o;
 
+        // Controller-aimed weapon (decoupled from head direction): the
+        // gun visually follows the right controller's own tracked pose
+        // instead of the head-tracked camera1->yaw/pitch this function
+        // normally uses. androidgetaim() leaves sway/gunyaw/gunpitch
+        // untouched (returning false) on desktop or when the controller
+        // isn't tracked, falling back to the existing head-aimed values.
+        float gunyaw = d->yaw+90, gunpitch = d->pitch;
+        if(d==player1)
+        {
+            vec aimdir; float aimyaw, aimpitch;
+            if(androidgetaim(sway, aimdir, aimyaw, aimpitch))
+            {
+                gunyaw = aimyaw+90;
+                gunpitch = aimpitch;
+            }
+        }
+
 #if 0
         if(player1->state!=CS_DEAD && player1->quadmillis)
         {
@@ -437,7 +454,7 @@ namespace game
             base = 0;
             interp = &guninterp;
         }
-        rendermodel(NULL, gunname, anim, sway, testhudgun ? 0 : d->yaw+90, testhudgun ? 0 : d->pitch, MDL_LIGHT|MDL_HUD, interp, a, base, (int)ceil(speed));
+        rendermodel(NULL, gunname, anim, sway, testhudgun ? 0 : gunyaw, testhudgun ? 0 : gunpitch, MDL_LIGHT|MDL_HUD, interp, a, base, (int)ceil(speed));
         if(d->muzzle.x >= 0) d->muzzle = calcavatarpos(d->muzzle, 12);
     }
 

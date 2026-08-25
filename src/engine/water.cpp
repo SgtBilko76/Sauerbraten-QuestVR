@@ -622,7 +622,7 @@ void genwatertex(GLuint &tex, GLuint &fb, GLuint &db, bool refract = false)
         depthfmt = depthfmts[find];
     }
 
-    glBindFramebuffer_(GL_FRAMEBUFFER, 0);
+    glBindFramebuffer_(GL_FRAMEBUFFER, defaultfb());
 }
 
 void addwaterfallrefraction(materialsurface &m)
@@ -1056,6 +1056,6 @@ nowaterfall:
 
     if(!refs) return;
     glViewport(0, 0, screenw, screenh);
-    glBindFramebuffer_(GL_FRAMEBUFFER, 0);
+    glBindFramebuffer_(GL_FRAMEBUFFER, defaultfb());
 }
 
