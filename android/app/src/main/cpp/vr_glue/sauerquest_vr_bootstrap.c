@@ -91,7 +91,28 @@ void VR_FrameSetup(void)
 
 bool VR_UseScreenLayer(void)
 {
-    return false; /* always render the real stereo projection layer */
+    /* The main menu (menus.cpp's g3d_addgui() forces GUI_2D while
+     * mainmenu is set, and main.cpp's renderbackground()) is rendered
+     * entirely via hudmatrix.ortho() -- flat screen-space content with no
+     * real per-eye perspective at all. Submitting that through the normal
+     * stereo XrCompositionLayerProjection is wrong: the compositor maps
+     * each eye's rendered image onto the display using that eye's own
+     * declared asymmetric FOV (its distortion-mesh/reprojection metadata),
+     * which only produces a correct result for content that was actually
+     * rendered with a matching per-eye perspective. Flat ortho content
+     * has none, so the two eyes' declared (and genuinely different, real
+     * lens-driven asymmetric) FOVs each warp the *same* image
+     * differently -- confirmed on-device as the actual cause of a
+     * reported inability to binocularly fuse the main menu at all, even
+     * with eye-to-eye camera *position* forced completely identical
+     * (ruling out every other stereo-math candidate first). The
+     * XrCompositionLayerQuad path below instead submits it as a real
+     * flat panel positioned in stage space, shown identically to both
+     * eyes regardless of per-eye FOV asymmetry -- the standard, correct
+     * technique for screen-locked 2D VR content. Real gameplay
+     * (gl_drawframe(), real per-eye asymmetric frustums matching the
+     * declared FOV) still needs the true stereo projection layer. */
+    return android_sauer_is_mainmenu() != 0;
 }
 
 float VR_GetScreenLayerDistance(void)
@@ -184,26 +205,58 @@ void *AppThreadFunction(void *parm)
             TBXR_prepareEyeBuffer(eye);
             if (gAppState.FrameState.shouldRender) {
                 /* gAppState.Projections[eye].pose is the eye relative to
-                 * HeadSpace (a small IPD-driven offset only -- eyes don't
-                 * rotate independently of the head); compose with the
-                 * head's own absolute pose (already updated this frame by
-                 * TBXR_FrameSetup() -> TBXR_GetHMDOrientation(), the same
-                 * call that populates hmdorientation[] below) to get the
-                 * eye's real position in world/stage space. Mirrors
-                 * TBXR_submitFrame()'s identical composition internally. */
+                 * HeadSpace -- a small IPD-driven offset only, NOT the
+                 * player's real position in the room (eyes don't rotate
+                 * independently of the head either, so only .position is
+                 * used here). android_sauer_set_eye()'s contract
+                 * (androidbridge.h) documents dx/dy/dz as exactly this:
+                 * "eye position offset from the head". Composing in
+                 * gAppState.xfStageFromHead (the player's real physical
+                 * position/height in the guardian-defined stage space, via
+                 * XrPosef_Multiply as TBXR_submitFrame() does for the
+                 * actual compositor submission) does NOT belong here --
+                 * this app has no room-scale/positional-tracking movement
+                 * system yet, so the player's *real* height and stage
+                 * position (easily 1.5+ real meters) would get added
+                 * straight onto camera1->o after being scaled by
+                 * vrworldscale, dwarfing the true ~3cm IPD offset and
+                 * placing the render camera somewhere arbitrary relative
+                 * to world geometry -- confirmed on-device as the actual
+                 * cause of a reported inability to binocularly fuse the
+                 * view (severe near-field parallax against whatever
+                 * geometry the camera ended up next to/inside, not a
+                 * subtle stereo-math error). */
                 XrPosef xfHeadFromEye = gAppState.Projections[eye].pose;
-                XrPosef xfStageFromEye = XrPosef_Multiply(gAppState.xfStageFromHead, xfHeadFromEye);
                 XrFovf fov = gAppState.Projections[eye].fov;
 
                 /* OpenXR is Y-up/right-handed (+X right, +Y up, -Z
-                 * forward). Remap into Sauerbraten's "quake style" world
-                 * axes with the same {-z,-x,y} convention
-                 * QuatToYawPitchRoll() above already uses for
-                 * hmdorientation, so position and orientation stay in a
-                 * consistent frame relative to each other. */
-                float dx = -xfStageFromEye.position.z;
-                float dy = -xfStageFromEye.position.x;
-                float dz =  xfStageFromEye.position.y;
+                 * forward). QuatToYawPitchRoll() (TBXR_Common.c) remaps
+                 * its forward/right vectors as {-z,-x,y} too, but that
+                 * convention is Quake/DarkPlaces's own (X=forward,
+                 * Y=lateral) -- it's only used there to extract a scalar
+                 * yaw/pitch/roll *angle*, which works out the same
+                 * regardless of which axis is nominally "forward", so it
+                 * never surfaced as a bug. Sauerbraten/Cube2's actual
+                 * world axes are the opposite: X=lateral (strafe),
+                 * Y=forward (verified against vecfromyawpitch() in
+                 * physics.cpp -- move contributes to .y, strafe to .x).
+                 * A *position* offset can't ignore that difference the
+                 * way an angle can: naively reusing {-z,-x,y} here put
+                 * the real ~3cm IPD offset (from OpenXR position.x, the
+                 * lateral axis) onto Sauerbraten's Y (forward/back)
+                 * instead of X (lateral) -- pushing one eye's camera
+                 * toward the scene and the other away from it along the
+                 * view axis instead of side-to-side. Confirmed on-device
+                 * as the actual cause of a reported inability to
+                 * binocularly fuse the view at all ("everything,
+                 * uniformly" doubled -- consistent with a wrong-axis
+                 * global camera-offset bug, not per-object depth error).
+                 * dx now carries the lateral component onto Sauerbraten's
+                 * X, dy the (near-zero, eyes don't offset forward/back)
+                 * depth component onto Sauerbraten's Y. */
+                float dx = -xfHeadFromEye.position.x;
+                float dy = -xfHeadFromEye.position.z;
+                float dz =  xfHeadFromEye.position.y;
 
                 android_sauer_set_eye(dx, dy, dz,
                     hmdorientation[1], hmdorientation[0], hmdorientation[2],
