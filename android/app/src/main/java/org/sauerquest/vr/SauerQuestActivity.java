@@ -2,10 +2,17 @@ package org.sauerquest.vr;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.res.AssetManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 // Lifecycle/JNI bridge Activity, structurally adapted from QuakeQuest's
 // GLES3JNIActivity.java (github.com/Team-Beef-Studios/QuakeQuest, GPLv2).
@@ -52,11 +59,53 @@ public class SauerQuestActivity extends Activity implements SurfaceHolder.Callba
 
 		sInstance = this;
 
+		// Sauerbraten's own file I/O (src/shared/stream.cpp's openfile())
+		// uses plain fopen() with paths relative to the process's working
+		// directory, not SDL_RWFromFile() -- so it has no idea APK assets
+		// exist at all (only SDL2_image's IMG_Load, used for texture
+		// loading, goes through SDL_RWFromFile's asset-manager fallback).
+		// Extract the bundled data/packages assets to internal storage
+		// once at startup, then chdir() there in native code (see
+		// vr_glue/sauerquest_vr_bootstrap.c's AppThreadFunction, right
+		// before it calls android_sauer_main()) so every relative fopen()
+		// the engine does just works against real files.
+		copyAssetTree("data", getFilesDir());
+		copyAssetTree("packages", getFilesDir());
+
 		SurfaceView view = new SurfaceView(this);
 		setContentView(view);
 		view.getHolder().addCallback(this);
 
 		mNativeHandle = SauerQuestJNILib.onCreate(this);
+	}
+
+	// Recursively copies assetSubdir (and everything under it) from the
+	// APK's assets/ into destDir/assetSubdir. AssetManager.list() (unlike
+	// the native AAssetManager C API) reliably enumerates subdirectories,
+	// which is why this runs on the Java side rather than in native code.
+	private void copyAssetTree(String assetSubdir, File destDir)
+	{
+		AssetManager assets = getAssets();
+		try {
+			String[] entries = assets.list(assetSubdir);
+			if (entries == null || entries.length == 0) {
+				// A leaf file, not a directory: list() returns empty for those.
+				File outFile = new File(destDir, assetSubdir);
+				outFile.getParentFile().mkdirs();
+				try (InputStream in = assets.open(assetSubdir);
+				     OutputStream out = new FileOutputStream(outFile)) {
+					byte[] buf = new byte[64 * 1024];
+					int n;
+					while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+				}
+				return;
+			}
+			for (String entry : entries) {
+				copyAssetTree(assetSubdir + "/" + entry, destDir);
+			}
+		} catch (IOException e) {
+			Log.e(TAG, "copyAssetTree failed for " + assetSubdir, e);
+		}
 	}
 
 	@Override protected void onStart()

@@ -152,6 +152,21 @@ void *AppThreadFunction(void *parm)
     ALOGV("SauerQuest VR bootstrap: booting engine (%dx%d per eye)",
           (int)gAppState.Width, (int)gAppState.Height);
 
+    /* Sauerbraten's own file I/O (src/shared/stream.cpp's openfile()) uses
+     * plain fopen() with paths relative to the process's cwd -- it has no
+     * concept of APK assets. SauerQuestActivity.onCreate() already
+     * extracted the bundled data/packages assets to internal storage
+     * (getFilesDir(), same path SDL_AndroidGetInternalStoragePath()
+     * returns); chdir() there now so every relative fopen() the engine is
+     * about to do just works. Declared extern rather than pulling in
+     * SDL.h here (this file otherwise has no SDL dependency at all). */
+    {
+        extern const char *SDL_AndroidGetInternalStoragePath(void);
+        const char *storagePath = SDL_AndroidGetInternalStoragePath();
+        if (storagePath) chdir(storagePath);
+        else ALOGV("SauerQuest VR bootstrap: SDL_AndroidGetInternalStoragePath() failed");
+    }
+
     {
         int argc = 1;
         char *argv[] = { (char *)"sauerquest" };

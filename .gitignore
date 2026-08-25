@@ -17,6 +17,17 @@
 *.a
 *.so
 *.dylib
+/src/vcpp/Release64/
+/src/vcpp/Debug64/
+/src/vcpp/Release/
+/src/vcpp/Debug/
+
+# Scratch output from ad hoc desktop test runs (e.g. asset-dependency
+# tracing to scope the Android assets/ bundle) -- not build inputs
+/tmphome/
+/stdout.txt
+/stderr.txt
+/screenshot.png
 
 # Android / Gradle / NDK build outputs
 android/**/build/

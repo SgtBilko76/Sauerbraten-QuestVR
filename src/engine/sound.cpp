@@ -210,6 +210,20 @@ bool initaudio()
 
 void initsound()
 {
+#ifdef __ANDROID__
+    // SDL2's Android audio backend calls into a Java SDLAudioManager
+    // class (AudioTrack-based device I/O) via its own separate
+    // nativeSetupJNI (SDL_android.c's SDL_JAVA_AUDIO_INTERFACE, distinct
+    // from the Activity one already wired up in
+    // vr_glue/sauerquest_vr_bootstrap.c) -- unimplemented so far, so
+    // methods like audioOpen/audioWriteByteBuffer are looked up against
+    // a class that doesn't declare them and crash if actually called.
+    // Skip opening an audio device entirely until that Java-side backend
+    // is written; this milestone's scope is visual (main menu on
+    // screen), not audio.
+    nosound = true;
+    return;
+#endif
     SDL_version version;
     SDL_GetVersion(&version);
     if(version.major == 2 && version.minor == 0 && version.patch == 6)

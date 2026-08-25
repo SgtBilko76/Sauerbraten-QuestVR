@@ -533,6 +533,23 @@ void gl_checkextensions()
         if(mesa) mesa_swap_bug = 1;
     }
 
+#ifdef __ANDROID__
+    // glemu.cpp's end() streams 2D UI/HUD geometry (menu text, icons, ...)
+    // into a persistently-mapped ring-buffer VBO via glMapBufferRange with
+    // GL_MAP_UNSYNCHRONIZED_BIT, relying on the driver to honor that
+    // contract (never let the GPU read a region the CPU is concurrently
+    // overwriting). Confirmed on-device (Quest 3, Adreno 740): this
+	// produces a consistent, reproducible ghosting artifact -- every
+    // glyph/icon shows a second, slightly offset copy -- i.e. exactly what
+    // stale-vs-fresh data racing in that ring buffer looks like. Reusing
+    // intel_mapbufferrange_bug (originally an older-Intel-driver-on-
+    // Windows workaround, see the WIN32 branch above) sidesteps the same
+    // fast path here: glemu.cpp's end() falls back to glBufferSubData_
+    // instead, which re-uploads the whole range synchronously each call
+    // and has no such race.
+    intel_mapbufferrange_bug = 1;
+#endif
+
     if(glversion >= 300 || hasext("GL_ARB_map_buffer_range"))
     {
         glMapBufferRange_         = (PFNGLMAPBUFFERRANGEPROC)        getprocaddress("glMapBufferRange");
