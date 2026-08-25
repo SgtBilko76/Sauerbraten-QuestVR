@@ -55,9 +55,9 @@ extern vec3_t hmdorientation;
  * physical size in meters -- deliberately explicit constants rather than
  * derived from the swapchain's own pixel aspect ratio, so the raycast
  * math doesn't need to re-read swapchain dimensions to match. */
-#define SAUERQUEST_MENU_SCREEN_DISTANCE 3.0f
-#define SAUERQUEST_MENU_SCREEN_WIDTH    2.2f
-#define SAUERQUEST_MENU_SCREEN_HEIGHT   2.4f
+#define SAUERQUEST_MENU_SCREEN_DISTANCE 2.2f
+#define SAUERQUEST_MENU_SCREEN_WIDTH    2.8f
+#define SAUERQUEST_MENU_SCREEN_HEIGHT   3.0f
 
 /* Implemented in sauerquest_vr_bootstrap.c: the screen's pose (position
  * of the player-side axis + facing orientation), anchored once when the
