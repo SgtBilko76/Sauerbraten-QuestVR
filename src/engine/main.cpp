@@ -1180,6 +1180,11 @@ void android_sauer_click(int isdown)
 {
     processkey(-1, isdown != 0);
 }
+
+void android_sauer_fire(int isdown)
+{
+    game::doattack(isdown != 0);
+}
 #endif
 
 #if defined(WIN32) && !defined(_DEBUG) && !defined(__GNUC__)

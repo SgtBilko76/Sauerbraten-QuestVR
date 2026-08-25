@@ -2010,8 +2010,6 @@ int TBXR_GetRefresh()
 	return gAppState.currentDisplayRefreshRate;
 }
 
-#define GL_FRAMEBUFFER_SRGB               0x8DB9
-
 void TBXR_ClearFrameBuffer(int width, int height)
 {
 	glEnable( GL_SCISSOR_TEST );
@@ -2026,9 +2024,28 @@ void TBXR_ClearFrameBuffer(int width, int height)
 	glScissor( 0, 0, 0, 0 );
 	glDisable( GL_SCISSOR_TEST );
 
-	//This is a bit of a hack, but we need to do this to correct for the fact that the engine uses linear RGB colorspace
-	//but openxr uses SRGB (or something, must admit I don't really understand, but adding this works to make it look good again)
-	glDisable( GL_FRAMEBUFFER_SRGB );
+	/* GL_FRAMEBUFFER_SRGB (0x8DB9) used to be glDisable()'d here, copied
+	 * from a desktop-GL reference -- that enum is a desktop-only
+	 * glEnable/glDisable capability with no GLES equivalent (GLES controls
+	 * sRGB encoding via the framebuffer's internal format at creation
+	 * time, not a runtime toggle), so the call only ever raised
+	 * GL_INVALID_ENUM every frame and did nothing either way. Confirmed
+	 * on-device: removing it changes nothing visually, and the spurious
+	 * error made bisecting a real, unrelated black-screen bug (engine
+	 * render-to-texture passes restoring the wrong framebuffer, see
+	 * engine.h's defaultfb()) noisier than necessary. */
+}
+
+/* engine.h's defaultfb() (Android-only) reads this -- see its own comment
+ * for why engine code can't just hardcode 0 the way desktop does. Tracked
+ * here rather than recomputed on demand since ovrFramebuffer_SetCurrent()
+ * (this file) is the only place that actually knows which of the
+ * TextureSwapChainIndex-selected images is current for this eye. */
+static GLuint sCurrentEyeFramebuffer = 0;
+
+unsigned int android_sauer_get_default_framebuffer(void)
+{
+	return sCurrentEyeFramebuffer;
 }
 
 void TBXR_prepareEyeBuffer(int eye )
@@ -2036,6 +2053,7 @@ void TBXR_prepareEyeBuffer(int eye )
 	ovrFramebuffer* frameBuffer = &(gAppState.Renderer.FrameBuffer[eye]);
 	ovrFramebuffer_Acquire(frameBuffer);
 	ovrFramebuffer_SetCurrent(frameBuffer);
+	sCurrentEyeFramebuffer = frameBuffer->FrameBuffers[frameBuffer->TextureSwapChainIndex];
 	TBXR_ClearFrameBuffer(frameBuffer->ColorSwapChain.Width, frameBuffer->ColorSwapChain.Height);
 }
 
