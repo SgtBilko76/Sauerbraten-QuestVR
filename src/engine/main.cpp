@@ -1170,6 +1170,16 @@ int android_sauer_is_mainmenu(void)
 {
     return mainmenu;
 }
+
+void android_sauer_set_cursor(float x, float y)
+{
+    g3d_setcursorpos(x, y);
+}
+
+void android_sauer_click(int isdown)
+{
+    processkey(-1, isdown != 0);
+}
 #endif
 
 #if defined(WIN32) && !defined(_DEBUG) && !defined(__GNUC__)

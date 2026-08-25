@@ -1293,6 +1293,16 @@ bool g3d_movecursor(int dx, int dy)
     return true;
 }
 
+// Absolute counterpart to g3d_movecursor()'s relative deltas, for
+// pointer sources that report a position directly instead of motion
+// (the Android build's controller-raycast menu pointer -- see
+// androidbridge.h's android_sauer_set_cursor()).
+void g3d_setcursorpos(float x, float y)
+{
+    cursorx = max(0.0f, min(1.0f, x));
+    cursory = max(0.0f, min(1.0f, y));
+}
+
 VARNP(guifollow, useguifollow, 0, 1, 1);
 VARNP(gui2d, usegui2d, 0, 1, 1);
 

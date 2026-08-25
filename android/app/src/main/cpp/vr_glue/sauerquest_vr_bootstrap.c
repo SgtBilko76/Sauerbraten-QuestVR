@@ -28,6 +28,12 @@
 #include "VrCommon.h"
 #include "androidbridge.h"
 
+/* Same local definition TBXR_Common.c uses (DarkPlaces normally pulls
+ * this in transitively via its own mathlib.h). */
+#ifndef DEG2RAD
+#define DEG2RAD(x) ((x) * (float)(M_PI / 180.0))
+#endif
+
 void jni_shutdown(void); /* defined below; VR_Shutdown() needs it forward-declared */
 
 /* Sauerbraten's own logging (logoutf() -> stdout, see src/engine/server.cpp)
@@ -106,9 +112,11 @@ bool VR_UseScreenLayer(void)
      * reported inability to binocularly fuse the main menu at all, even
      * with eye-to-eye camera *position* forced completely identical
      * (ruling out every other stereo-math candidate first). The
-     * XrCompositionLayerQuad path below instead submits it as a real
-     * flat panel positioned in stage space, shown identically to both
-     * eyes regardless of per-eye FOV asymmetry -- the standard, correct
+     * XrCompositionLayerCylinderKHR path below (TBXR_Common.c's
+     * TBXR_submitFrame(), falling back to a flat Quad on runtimes without
+     * that extension) instead submits it as a real curved panel
+     * positioned in stage space, shown identically to both eyes
+     * regardless of per-eye FOV asymmetry -- the standard, correct
      * technique for screen-locked 2D VR content. Real gameplay
      * (gl_drawframe(), real per-eye asymmetric frustums matching the
      * declared FOV) still needs the true stereo projection layer. */
@@ -117,7 +125,7 @@ bool VR_UseScreenLayer(void)
 
 float VR_GetScreenLayerDistance(void)
 {
-    return 4.5f; /* unused while VR_UseScreenLayer() is false */
+    return SAUERQUEST_MENU_SCREEN_DISTANCE;
 }
 
 void VR_SetHMDOrientation(float pitch, float yaw, float roll)
@@ -133,8 +141,111 @@ void VR_SetHMDPosition(float x, float y, float z)
     playerHeight = y;
 }
 
+/* The main menu screen's pose (see VrCommon.h's SauerQuest_GetMenuScreenPose()
+ * declaration for why this is cached instead of read from live head
+ * tracking every frame -- doing that made the screen visibly chase the
+ * player's head/gaze instead of staying fixed in the room). Anchored
+ * fresh, facing wherever the player was looking, each time the menu
+ * transitions from closed to open. */
+static XrPosef sMenuScreenPose;
+static bool sMenuScreenAnchored = false;
+
+static void SauerQuest_UpdateMenuScreenAnchor(void)
+{
+    if (!android_sauer_is_mainmenu()) {
+        sMenuScreenAnchored = false; /* re-anchor fresh next time the menu opens */
+        return;
+    }
+    if (sMenuScreenAnchored) return;
+
+    const XrVector3f axis = {0.0f, 1.0f, 0.0f};
+    sMenuScreenPose.position = gAppState.xfStageFromHead.position;
+    sMenuScreenPose.orientation = XrQuaternionf_CreateFromVectorAngle(axis, DEG2RAD(playerYaw));
+    sMenuScreenAnchored = true;
+}
+
+XrPosef SauerQuest_GetMenuScreenPose(void)
+{
+    return sMenuScreenPose;
+}
+
+/* Right-controller laser-pointer emulation for the main menu's curved
+ * "virtual screen" (see VR_UseScreenLayer()). Sauerbraten's own 3D GUI
+ * cursor (3dgui.cpp's cursorx/cursory) is desktop-mouse-driven --
+ * relative deltas fed through g3d_movecursor() from SDL_MOUSEMOTION --
+ * which never fires on Android (no SDL window/mouse). This instead
+ * raycasts the right controller's aim pose against the screen and feeds
+ * the hit point in as an absolute cursor position, and maps the trigger
+ * to the same processkey(-1, isdown) call desktop's SDL_BUTTON_LEFT
+ * handler makes.
+ *
+ * The screen may actually be a slightly curved XrCompositionLayerCylinderKHR
+ * (TBXR_Common.c), but for SAUERQUEST_MENU_SCREEN_WIDTH's central angle
+ * the curve's deviation from a flat plane at the same center/distance is
+ * a few centimeters at most -- well under pointer precision needed for a
+ * menu, so a flat-plane intersection test is used instead of solving the
+ * actual cylinder surface, since it's far simpler and visually
+ * indistinguishable. */
+static void SauerQuest_UpdateMenuPointer(void)
+{
+    static bool triggerWasDown = false;
+
+    if (!android_sauer_is_mainmenu()) {
+        triggerWasDown = false; /* don't carry a stale click into gameplay */
+        return;
+    }
+    if (!rightRemoteTracking_new.Active) return;
+
+    XrPosef screenPose = SauerQuest_GetMenuScreenPose();
+    XrVector3f screenForward = XrQuaternionf_Rotate(screenPose.orientation, (XrVector3f){0.0f, 0.0f, -1.0f});
+    XrVector3f screenRight   = XrQuaternionf_Rotate(screenPose.orientation, (XrVector3f){1.0f, 0.0f, 0.0f});
+    XrVector3f screenUp      = XrQuaternionf_Rotate(screenPose.orientation, (XrVector3f){0.0f, 1.0f, 0.0f});
+
+    /* Cylinder/quad pose.position is the player/axis, not the visible
+     * surface -- matches TBXR_submitFrame()'s own placement. */
+    XrVector3f screenCenter = {
+        screenPose.position.x + screenForward.x * SAUERQUEST_MENU_SCREEN_DISTANCE,
+        screenPose.position.y + screenForward.y * SAUERQUEST_MENU_SCREEN_DISTANCE,
+        screenPose.position.z + screenForward.z * SAUERQUEST_MENU_SCREEN_DISTANCE
+    };
+
+    XrVector3f rayOrigin = rightRemoteTracking_new.Pose.position;
+    XrVector3f rayDir = XrQuaternionf_Rotate(rightRemoteTracking_new.Pose.orientation, (XrVector3f){0.0f, 0.0f, -1.0f});
+
+    float denom = rayDir.x*screenForward.x + rayDir.y*screenForward.y + rayDir.z*screenForward.z;
+    if (denom > 0.0001f) {
+        XrVector3f toCenter = {
+            screenCenter.x - rayOrigin.x, screenCenter.y - rayOrigin.y, screenCenter.z - rayOrigin.z
+        };
+        float t = (toCenter.x*screenForward.x + toCenter.y*screenForward.y + toCenter.z*screenForward.z) / denom;
+        if (t > 0.0f) {
+            XrVector3f hit = {
+                rayOrigin.x + rayDir.x*t, rayOrigin.y + rayDir.y*t, rayOrigin.z + rayDir.z*t
+            };
+            XrVector3f toHit = { hit.x - screenCenter.x, hit.y - screenCenter.y, hit.z - screenCenter.z };
+            float localRight = toHit.x*screenRight.x + toHit.y*screenRight.y + toHit.z*screenRight.z;
+            float localUp    = toHit.x*screenUp.x    + toHit.y*screenUp.y    + toHit.z*screenUp.z;
+
+            float u = 0.5f + localRight / SAUERQUEST_MENU_SCREEN_WIDTH;
+            float v = 0.5f - localUp / SAUERQUEST_MENU_SCREEN_HEIGHT;
+            if (u < 0.0f) u = 0.0f; else if (u > 1.0f) u = 1.0f;
+            if (v < 0.0f) v = 0.0f; else if (v > 1.0f) v = 1.0f;
+            android_sauer_set_cursor(u, v);
+        }
+    }
+
+    bool triggerDown = (rightTrackedRemoteState_new.Buttons & xrButton_Trigger) != 0;
+    if (triggerDown != triggerWasDown) {
+        android_sauer_click(triggerDown ? 1 : 0);
+        triggerWasDown = triggerDown;
+    }
+}
+
 void VR_HandleControllerInput(void)
 {
+    SauerQuest_UpdateMenuScreenAnchor();
+    TBXR_UpdateControllers();
+    SauerQuest_UpdateMenuPointer();
 }
 
 void VR_Shutdown(void)
