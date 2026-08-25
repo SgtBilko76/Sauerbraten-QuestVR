@@ -1165,6 +1165,11 @@ void android_sauer_endframe(void)
     swapbuffers();
     renderedframe = inbetweenframes = true;
 }
+
+int android_sauer_is_mainmenu(void)
+{
+    return mainmenu;
+}
 #endif
 
 #if defined(WIN32) && !defined(_DEBUG) && !defined(__GNUC__)

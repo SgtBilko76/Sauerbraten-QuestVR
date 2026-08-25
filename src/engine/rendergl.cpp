@@ -740,6 +740,21 @@ void setcammatrix()
     // move from RH to Z-up LH quake style worldspace
     cammatrix = viewmatrix;
 #ifdef __ANDROID__
+    // drawtex != DRAWTEX_NONE means this call is for one of the
+    // render-to-texture passes (envmap/minimap/modelpreview) that
+    // temporarily repoint camera1 at their own throwaway physent with a
+    // fixed pose (e.g. modelpreview::start(): camera.o=(0,0,0), yaw=0,
+    // pitch=modelpreviewpitch, roll=0 -- the spinning cube-badge/model
+    // icon on the main menu and elsewhere). Applying the head-tracked
+    // override in that case hijacks their intentionally-fixed camera
+    // with the real head pose instead -- confirmed on-device as the
+    // actual cause of a reported "way too much difference between the
+    // eyes" (the badge's orientation/position was swinging with head
+    // yaw/eye offset instead of staying put), not a stereo-math bug in
+    // the per-eye offset itself. Fall through to the normal
+    // camera1-driven path below for these, exactly like desktop.
+    if(!drawtex)
+    {
     // Head orientation drives the view directly (absolute, not the
     // mouse-delta accumulation mousemove() normally does -- see
     // main.cpp's checkinput(), never called on Android since there's no
@@ -755,11 +770,42 @@ void setcammatrix()
     cammatrix.rotate_around_y(androidEyeRoll*RAD);
     cammatrix.rotate_around_x(androidEyePitch*-RAD);
     cammatrix.rotate_around_z(androidEyeYaw*-RAD);
+    // androidEyeOffsetMeters is head-relative (it rotates with wherever
+    // the player is currently looking -- the IPD offset always points
+    // "to the left/right of view", not to some fixed compass direction),
+    // but camera1->o is a world-space position, so the offset must be
+    // rotated into world space before being added to it -- otherwise, on
+    // any frame where head yaw/pitch/roll isn't ~0, the offset partly
+    // lands on the *depth* axis instead of staying purely lateral, which
+    // (confirmed on-device: reported as "too much difference between the
+    // eyes") throws off both eyes' effective distance from nearby
+    // geometry, not just their apparent left-right separation. cammatrix
+    // at this point already holds exactly the world->head-local rotation
+    // built above (no translation applied yet) -- transposedtransformnormal()
+    // is the same "invert a pure rotation via its transpose" idiom used a
+    // few lines down for camdir/camright/camup, so reusing it here to
+    // bring the offset back into world space is guaranteed
+    // self-consistent with cammatrix's actual rotation, unlike
+    // independently re-deriving the reverse rotation sequence by hand (a
+    // prior attempt at that -- reversed order, negated angles -- did not
+    // resolve a reported inability to binocularly fuse the view).
+    vec eyeOffsetWorld;
+    cammatrix.transposedtransformnormal(androidEyeOffsetMeters, eyeOffsetWorld);
     // camera1->o is the player's logical/gameplay position (movement,
     // collision -- untouched here); the per-eye positional offset from
     // real head tracking is added only to the render-camera translation,
     // the same "body root + head-relative offset" split most VR rigs use.
-    cammatrix.translate(vec(camera1->o).add(vec(androidEyeOffsetMeters).mul(float(vrworldscale))).neg());
+    cammatrix.translate(vec(camera1->o).add(eyeOffsetWorld.mul(float(vrworldscale))).neg());
+    }
+    else
+    {
+        // drawtex != DRAWTEX_NONE: use whatever camera1 was temporarily
+        // repointed to as-is, same as desktop -- see the comment above.
+        cammatrix.rotate_around_y(camera1->roll*RAD);
+        cammatrix.rotate_around_x(camera1->pitch*-RAD);
+        cammatrix.rotate_around_z(camera1->yaw*-RAD);
+        cammatrix.translate(vec(camera1->o).neg());
+    }
 #else
     cammatrix.rotate_around_y(camera1->roll*RAD);
     cammatrix.rotate_around_x(camera1->pitch*-RAD);

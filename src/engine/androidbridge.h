@@ -60,6 +60,20 @@ void android_sauer_set_eye(float dx, float dy, float dz,
                             float yaw, float pitch, float roll,
                             float tanLeft, float tanRight, float tanUp, float tanDown);
 
+// Implemented in main.cpp; reports whether the engine is currently showing
+// the (fully 2D/ortho -- see menus.cpp's g3d_addgui() GUI_2D forcing while
+// mainmenu is set, and main.cpp's renderbackground(), also pure
+// hudmatrix.ortho()) main menu rather than real 3D gameplay. The native VR
+// frame loop uses this to switch TBXR's submission between a flat
+// XrCompositionLayerQuad (correct for this ortho-only content -- a
+// Projection layer's per-eye asymmetric FOV drives the compositor's
+// distortion-mesh mapping of the rendered image, which doesn't apply
+// correctly to content that was never rendered with any real per-eye
+// perspective in the first place, confirmed on-device as the actual cause
+// of a reported inability to binocularly fuse the main menu at all) and
+// the normal stereo Projection layer used for real gameplay.
+int android_sauer_is_mainmenu(void);
+
 #ifdef __cplusplus
 }
 #endif
