@@ -283,9 +283,28 @@ namespace gle
             if(vertexsize == lastvertexsize && buf >= lastbuf)
             {
                 start = int(buf - lastbuf)/vertexsize;
+#ifdef __ANDROID__
+                // The "reuse the previous glVertexAttribPointer bindings
+                // and just offset the draw call" optimization below (the
+                // `else buf = lastbuf` branch) is only bounds/sanity-
+                // checked for GL_QUADS (the condition to its left) --
+                // every other primitive type takes it unconditionally.
+                // Confirmed on-device (Quest 3, Adreno 740): this
+                // produces the same class of ghosted-duplicate-geometry
+                // artifact as the map-buffer-range race
+                // (intel_mapbufferrange_bug) above, visible on
+                // GL_TRIANGLE_STRIP draws (bgquad()'s logo/background
+                // quads) even with that fix applied. Always re-issue
+                // setattribs() with the freshly uploaded buffer location
+                // instead -- costs a few redundant glVertexAttribPointer
+                // calls per frame, not worth chasing further for how
+                // cheap this 2D UI geometry is.
+                start = 0;
+#else
                 if(primtype == GL_QUADS && (start%4 || start + attribbuf.length()/vertexsize >= 4*MAXQUADS))
                     start = 0;
                 else buf = lastbuf;
+#endif
             }
             vbooffset += attribbuf.length();
         }

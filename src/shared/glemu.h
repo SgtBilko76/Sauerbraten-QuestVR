@@ -53,7 +53,20 @@ namespace gle
 
     GLE_INITATTRIBF(vertex, ATTRIB_VERTEX)
     GLE_INITATTRIBF(color, ATTRIB_COLOR)
+    // glVertexAttrib4Nubv is desktop-GL-only -- GLES's vertex attrib API
+    // (both GLES2 and GLES3) only defines the float-taking
+    // glVertexAttrib4f/4fv variants, no N/s/ub/i-suffixed ones at all, so
+    // glVertexAttrib4Nubv_ (rendergl.cpp's gl_checkextensions()) is
+    // correctly NULL on Android, not a lookup failure -- calling through
+    // it crashes. Scale the 0-255 byte color to a normalized 0-1 float
+    // vec4 by hand instead; this is the only call site in the engine that
+    // used an N/s/ub/i-suffixed setter (GLE_INITATTRIBN below is defined
+    // but never instantiated).
+#ifdef __ANDROID__
+    static inline void color(const bvec4 &v) { glVertexAttrib4f_(ATTRIB_COLOR, v.x/255.0f, v.y/255.0f, v.z/255.0f, v.w/255.0f); }
+#else
     static inline void color(const bvec4 &v) { glVertexAttrib4Nubv_(ATTRIB_COLOR, v.v); }
+#endif
     static inline void color(const bvec &v, uchar alpha = 255) { color(bvec4(v, alpha)); }
     static inline void colorub(uchar x, uchar y, uchar z, uchar w = 255) { color(bvec4(x, y, z, w)); }
     GLE_INITATTRIBF(texcoord0, ATTRIB_TEXCOORD0)
