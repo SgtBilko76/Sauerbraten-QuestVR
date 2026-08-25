@@ -499,6 +499,33 @@ void guikeyfield(char *var, int *maxlength, char *onchange)
     if(result) updateval(var, result, onchange);
 }
 
+// In-VR virtual keyboard (Quest's own system keyboard refuses to show for
+// this app -- confirmed on-device via logcat's "KeyboardInputMethodService:
+// onShowInputRequested: conditions to open keyboard not met", apparently a
+// deliberate restriction for fully-immersive/vr_only apps like this one,
+// not something fixable from the app side). These feed into exactly the
+// same processtextinput()/processkey() calls a physical or system-IME
+// keyboard would, so they work with any focused field (guifield/
+// guikeyfield) with no changes on that side -- see data/menus/vkeyboard.cfg
+// for the actual clickable key layout, driven by the same controller
+// raycast pointer as the rest of the curved-screen menu.
+void vkeychar(char *ch)
+{
+    processtextinput(ch, (int)strlen(ch));
+}
+
+void vkeybackspace()
+{
+    processkey(SDLK_BACKSPACE, true);
+    processkey(SDLK_BACKSPACE, false);
+}
+
+void vkeyenter()
+{
+    processkey(SDLK_RETURN, true);
+    processkey(SDLK_RETURN, false);
+}
+
 //use text<action> to do more...
 
 
@@ -616,6 +643,9 @@ COMMAND(guicheckbox, "ssffs");
 COMMAND(guitab, "s");
 COMMAND(guifield, "sis");
 COMMAND(guikeyfield, "sis");
+COMMAND(vkeychar, "s");
+COMMAND(vkeybackspace, "");
+COMMAND(vkeyenter, "");
 COMMAND(guieditor, "siii");
 COMMAND(guicolor, "i");
 COMMAND(guitextbox, "siii");
