@@ -176,6 +176,7 @@ typedef struct
 typedef union {
     XrCompositionLayerProjection Projection;
     XrCompositionLayerQuad Quad;
+    XrCompositionLayerCylinderKHR Cylinder;
 } xrCompositorLayer_Union;
 
 #define GL(func) func;

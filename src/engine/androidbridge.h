@@ -74,6 +74,15 @@ void android_sauer_set_eye(float dx, float dy, float dz,
 // the normal stereo Projection layer used for real gameplay.
 int android_sauer_is_mainmenu(void);
 
+// Implemented in 3dgui.cpp/main.cpp; let the right controller's raycast
+// against the main-menu "virtual screen" (see VR_UseScreenLayer()) drive
+// the existing 3D GUI cursor and click state, in place of desktop's
+// SDL-mouse-driven g3d_movecursor()/processkey(-1,...) path (never fires
+// on Android -- no SDL window/mouse). x/y are normalized [0,1] with
+// (0,0) at the top-left, matching g3d_addgui()'s GUI_2D ortho space.
+void android_sauer_set_cursor(float x, float y);
+void android_sauer_click(int isdown);
+
 #ifdef __cplusplus
 }
 #endif

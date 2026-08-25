@@ -61,6 +61,12 @@ float SS_MULTIPLIER    = 1.3f;
 
 GLboolean stageSupported = GL_FALSE;
 
+/* Set once at instance creation (see TBXR_AddExtensionIfAvailable() call
+ * below); read by TBXR_submitFrame() to decide whether the main menu's
+ * "virtual screen" can be a genuinely curved XrCompositionLayerCylinderKHR
+ * or must fall back to a flat XrCompositionLayerQuad. */
+static bool cylinderLayerSupported = false;
+
 const char* const requiredExtensionNames_meta[] = {
 		XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME,
 		XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME,
@@ -1713,6 +1719,12 @@ void TBXR_InitialiseOpenXR()
 			XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME,
 			enabledExtensions,
 			&enabledExtensionCount);
+	cylinderLayerSupported = TBXR_AddExtensionIfAvailable(
+			availableExtensions,
+			availableExtensionCount,
+			XR_KHR_COMPOSITION_LAYER_CYLINDER_EXTENSION_NAME,
+			enabledExtensions,
+			&enabledExtensionCount);
 
 	bool picoRuntime = TBXR_AddExtensionIfAvailable(
 			availableExtensions,
@@ -2134,9 +2146,44 @@ void TBXR_submitFrame()
 		}
 
 		gAppState.Layers[gAppState.LayerCount++].Projection = projection_layer;
+	} else if (cylinderLayerSupported) {
+
+		// Build a curved cylinder layer -- SauerQuest_UpdateMenuPointer()
+		// (sauerquest_vr_bootstrap.c) raycasts the right controller
+		// against the same geometry (as a flat-plane approximation, close
+		// enough for this central angle) to drive the menu's cursor.
+		XrCompositionLayerCylinderKHR cylinder_layer = {};
+		int width = gAppState.Renderer.FrameBuffer[0].ColorSwapChain.Width;
+		int height = gAppState.Renderer.FrameBuffer[0].ColorSwapChain.Height;
+		cylinder_layer.type = XR_TYPE_COMPOSITION_LAYER_CYLINDER_KHR;
+		cylinder_layer.next = NULL;
+		cylinder_layer.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+		cylinder_layer.space = gAppState.CurrentSpace;
+		cylinder_layer.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+		memset(&cylinder_layer.subImage, 0, sizeof(XrSwapchainSubImage));
+		cylinder_layer.subImage.swapchain = gAppState.Renderer.FrameBuffer[0].ColorSwapChain.Handle;
+		cylinder_layer.subImage.imageRect.offset.x = 0;
+		cylinder_layer.subImage.imageRect.offset.y = 0;
+		cylinder_layer.subImage.imageRect.extent.width = width;
+		cylinder_layer.subImage.imageRect.extent.height = height;
+		cylinder_layer.subImage.imageArrayIndex = 0;
+
+		// A cylinder's pose is the axis it curves around (at the player),
+		// not the visible surface itself -- radius supplies the distance,
+		// unlike the flat quad fallback below which has to push its own
+		// position forward by that same distance instead. Read from the
+		// cached, once-per-menu-open anchor (see VrCommon.h) rather than
+		// live head tracking, so the screen stays fixed in the room
+		// instead of chasing the player's head/gaze every frame.
+		cylinder_layer.pose = SauerQuest_GetMenuScreenPose();
+		cylinder_layer.radius = SAUERQUEST_MENU_SCREEN_DISTANCE;
+		cylinder_layer.centralAngle = SAUERQUEST_MENU_SCREEN_WIDTH / SAUERQUEST_MENU_SCREEN_DISTANCE;
+		cylinder_layer.aspectRatio = SAUERQUEST_MENU_SCREEN_WIDTH / SAUERQUEST_MENU_SCREEN_HEIGHT;
+
+		gAppState.Layers[gAppState.LayerCount++].Cylinder = cylinder_layer;
 	} else {
 
-		// Build the quad layer
+		// Flat fallback for runtimes without XR_KHR_composition_layer_cylinder.
 		XrCompositionLayerQuad quad_layer = {};
 		int width = gAppState.Renderer.FrameBuffer[0].ColorSwapChain.Width;
 		int height = gAppState.Renderer.FrameBuffer[0].ColorSwapChain.Height;
@@ -2152,15 +2199,20 @@ void TBXR_submitFrame()
 		quad_layer.subImage.imageRect.extent.width = width;
 		quad_layer.subImage.imageRect.extent.height = height;
 		quad_layer.subImage.imageArrayIndex = 0;
-		const XrVector3f axis = {0.0f, 1.0f, 0.0f};
+		// Same cached anchor as the cylinder branch above -- a quad's
+		// pose is the surface itself, so push it forward from the
+		// anchored axis point by the same distance the cylinder's radius
+		// implies.
+		XrPosef screenPose = SauerQuest_GetMenuScreenPose();
+		XrVector3f screenForward = XrQuaternionf_Rotate(screenPose.orientation, (XrVector3f){0.0f, 0.0f, -1.0f});
 		XrVector3f pos = {
-				gAppState.xfStageFromHead.position.x - sin(DEG2RAD(playerYaw)) * VR_GetScreenLayerDistance(),
-				1.0f,
-				gAppState.xfStageFromHead.position.z - cos(DEG2RAD(playerYaw)) * VR_GetScreenLayerDistance()
+				screenPose.position.x + screenForward.x * SAUERQUEST_MENU_SCREEN_DISTANCE,
+				screenPose.position.y + screenForward.y * SAUERQUEST_MENU_SCREEN_DISTANCE,
+				screenPose.position.z + screenForward.z * SAUERQUEST_MENU_SCREEN_DISTANCE
 		};
-		quad_layer.pose.orientation = XrQuaternionf_CreateFromVectorAngle(axis, DEG2RAD(playerYaw));
+		quad_layer.pose.orientation = screenPose.orientation;
 		quad_layer.pose.position = pos;
-		XrExtent2Df size = {5.0f, 4.5f};
+		XrExtent2Df size = {SAUERQUEST_MENU_SCREEN_WIDTH, SAUERQUEST_MENU_SCREEN_HEIGHT};
 		quad_layer.size = size;
 
 		gAppState.Layers[gAppState.LayerCount++].Quad = quad_layer;
