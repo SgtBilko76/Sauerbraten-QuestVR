@@ -76,6 +76,18 @@ public class SauerQuestActivity extends Activity implements SurfaceHolder.Callba
 		setContentView(view);
 		view.getHolder().addCallback(this);
 
+		// org.libsdl.app.SDLAudioManager (AudioTrack-based playback glue
+		// for SDL2's Android audio backend) needs this same
+		// initialize()/setContext()/nativeSetupJNI() sequence stock SDL
+		// apps get from SDL.java's setupJNI()/initialize() -- this port
+		// has no such helper, so it's called directly here, before the
+		// native engine thread starts (SauerQuestJNILib.onCreate() below)
+		// and can reach initsound()'s SDL_InitSubSystem(SDL_INIT_AUDIO)/
+		// Mix_OpenAudio() calls.
+		org.libsdl.app.SDLAudioManager.initialize();
+		org.libsdl.app.SDLAudioManager.setContext(this);
+		org.libsdl.app.SDLAudioManager.nativeSetupJNI();
+
 		mNativeHandle = SauerQuestJNILib.onCreate(this);
 	}
 
@@ -138,6 +150,7 @@ public class SauerQuestActivity extends Activity implements SurfaceHolder.Callba
 			SauerQuestJNILib.onSurfaceDestroyed(mNativeHandle);
 		}
 		if (mNativeHandle != 0) SauerQuestJNILib.onDestroy(mNativeHandle);
+		org.libsdl.app.SDLAudioManager.release(this);
 		super.onDestroy();
 		mNativeHandle = 0;
 	}
