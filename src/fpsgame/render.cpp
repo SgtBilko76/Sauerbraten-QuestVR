@@ -406,9 +406,10 @@ namespace game
     // World units the VR viewmodel is rendered at, from the head -- see
     // drawhudmodel()'s own comment for why this is fixed rather than the
     // controller's real tracked distance. vrworldscale (rendergl.cpp,
-    // default 10 units/meter) makes 7 units roughly 0.7m, a typical
-    // comfortable VR weapon-hold distance.
-    VARP(hudgunvrdist, 1, 7, 1000);
+    // default 10 units/meter) makes 4 units roughly 0.4m -- confirmed
+    // on-device that the previous 7 (0.7m) made the viewmodel look too
+    // small/far for a held weapon.
+    VARP(hudgunvrdist, 1, 4, 1000);
 #endif
 
     void drawhudmodel(fpsent *d, int anim, float speed = 0, int base = 0)
