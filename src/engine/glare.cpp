@@ -52,6 +52,19 @@ bool glaring = false;
 
 void drawglaretex()
 {
+#ifdef __ANDROID__
+    // Unconditional, regardless of the glare cvar's own value -- the
+    // exact same crash this cvar's capped max (above) was meant to
+    // prevent recurred even with that cap in place (confirmed on-device:
+    // identical gle::end() NULL-pointer backtrace through this same
+    // drawglaretex() -> ... -> renderwater() chain), meaning something
+    // -- most likely a persisted config value applied through a path
+    // that doesn't go through this cvar's own clamping -- can still
+    // reach glare=1 on this platform. Not worth root-causing that
+    // specific bypass when the simplest fix is to just never let this
+    // function do anything at all here.
+    return;
+#endif
     if(!glare) return;
 
     int w = 1<<glaresize, h = 1<<glaresize, blury = blurglare;
