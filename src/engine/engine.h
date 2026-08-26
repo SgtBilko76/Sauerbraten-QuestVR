@@ -573,6 +573,7 @@ extern bool shouldclearskyboxglare();
 extern void g3d_render();
 extern void g3d_render2d();
 extern bool g3d_windowhit(bool on, bool act);
+extern bool g3d_hasguiwindow();
 extern bool g3d_key(int code, bool isdown);
 extern bool g3d_input(const char *str, int len);
 // menus

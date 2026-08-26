@@ -185,13 +185,33 @@ XrPosef SauerQuest_GetMenuScreenPose(void)
  * a few centimeters at most -- well under pointer precision needed for a
  * menu, so a flat-plane intersection test is used instead of solving the
  * actual cylinder surface, since it's far simpler and visually
- * indistinguishable. */
+ * indistinguishable.
+ *
+ * The in-game pause/options menu and scoreboard (opened via the left
+ * Menu/Y buttons -- see VR_HandleControllerInput() below -- while
+ * android_sauer_is_mainmenu() stays false, since a game is still
+ * running) need no cursor-position math at all: they're real-3D
+ * "floating panel" gui windows (3dgui.cpp's usegui2d cap on Android),
+ * whose own hit-test already reads the controller's aim ray directly
+ * (androidgetaim(), 3dgui.cpp) instead of head direction. Only the
+ * trigger's click-forwarding needs to keep running for those, gated on
+ * the more general android_sauer_is_menu_open() instead of the
+ * boot-menu-only android_sauer_is_mainmenu(). */
 static void SauerQuest_UpdateMenuPointer(void)
 {
     static bool triggerWasDown = false;
 
-    if (!android_sauer_is_mainmenu()) {
+    if (!android_sauer_is_menu_open()) {
         triggerWasDown = false; /* don't carry a stale click into gameplay */
+        return;
+    }
+
+    if (!android_sauer_is_mainmenu()) {
+        bool triggerDown = (rightTrackedRemoteState_new.Buttons & xrButton_Trigger) != 0;
+        if (triggerDown != triggerWasDown) {
+            android_sauer_click(triggerDown ? 1 : 0);
+            triggerWasDown = triggerDown;
+        }
         return;
     }
     if (!rightRemoteTracking_new.Active) return;
@@ -279,7 +299,11 @@ static void SauerQuest_UpdateWeaponFire(void)
 {
     static bool triggerWasDown = false;
 
-    if (android_sauer_is_mainmenu()) {
+    /* Also gated on the pause/options menu and scoreboard now, not just
+     * the boot main menu -- SauerQuest_UpdateMenuPointer() above claims
+     * the trigger as a menu click whenever any of those are open, so
+     * this needs to back off the same way to avoid also firing a shot. */
+    if (android_sauer_is_menu_open()) {
         triggerWasDown = false; /* don't carry a stale fire-hold into the menu */
         return;
     }

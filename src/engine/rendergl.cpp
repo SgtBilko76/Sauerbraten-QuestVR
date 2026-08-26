@@ -2418,6 +2418,37 @@ void drawcrosshair(int w, int h)
         crosshair = cursor;
         chsize = cursorsize*w/900.0f;
         g3d_cursorpos(cx, cy);
+#ifdef __ANDROID__
+        // g3d_cursorpos() only knows the flat 2D cursor (cursorx/cursory,
+        // set by the main menu's own controller-raycast) -- for the
+        // in-game pause menu/scoreboard (real-3D "floating panel" gui
+        // windows on Android, see usegui2d's cap in 3dgui.cpp) it falls
+        // back to a hardcoded screen-center position that doesn't track
+        // the controller at all, confirmed on-device as the cursor
+        // appearing to vanish behind the menu panel instead of pointing
+        // at whatever it's aimed at. Fixed the same way the weapon
+        // crosshair below handles this: project worldpos (this frame's
+        // aim raycast hit point against real world geometry, kept
+        // updated every frame regardless of whether a menu is open by
+        // SauerQuest_UpdateWeaponAim()) through this eye's own
+        // camprojmatrix. worldpos itself is where the ray hits a wall,
+        // not the (non-physical) menu panel, but perspective projection's
+        // screen-space x/y depends only on direction from the eye, not
+        // distance -- so this gives the controller's true on-screen aim
+        // point regardless. Only reachable when a menu is actually open
+        // and not the boot main menu itself, which already has a correct
+        // cursorx/cursory from g3d_cursorpos() above.
+        if(!mainmenu)
+        {
+            vec4 clip;
+            camprojmatrix.transform(worldpos, clip);
+            if(clip.w > 1e-4f && clip.z >= -clip.w)
+            {
+                cx = 0.5f + (clip.x/clip.w)*0.5f;
+                cy = 0.5f - (clip.y/clip.w)*0.5f;
+            }
+        }
+#endif
     }
     else
     {
