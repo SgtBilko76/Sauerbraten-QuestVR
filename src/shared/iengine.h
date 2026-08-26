@@ -594,3 +594,17 @@ extern void g3d_limitscale(float scale);
 //   if(androidgetaim(pos, dir, yaw, pitch)) { ...use controller aim... }
 extern bool androidgetaim(vec &pos, vec &dir, float &yaw, float &pitch);
 
+// Aligns the persistent snap-turn body-yaw offset (androidBodyYaw,
+// rendergl.cpp) so the player's *combined* view direction (head yaw +
+// body yaw) matches spawnyaw at this exact instant -- called once by
+// spawnplayer() (fpsgame/fps.cpp) for the local player right after
+// findplayerspawn() sets d->yaw to the map's intended spawnpoint facing.
+// Without this, that spawnpoint facing has no effect on Android at all:
+// camera1->yaw gets overwritten every frame by head tracking + body yaw
+// regardless of whatever d->yaw was just set to, so the player actually
+// spawns facing wherever they happen to be physically oriented in the
+// room, unrelated to map design intent (confirmed on-device as a "wrong
+// direction" report). No-op on desktop (head yaw *is* d->yaw there, by
+// construction of mouse-look).
+extern void android_sauer_align_spawn_yaw(float spawnyaw);
+

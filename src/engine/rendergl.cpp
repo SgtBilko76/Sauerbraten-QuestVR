@@ -747,6 +747,17 @@ void android_sauer_snap_turn(float degrees)
     androidBodyYaw += degrees;
 }
 
+// See iengine.h for the full explanation. androidEyeYaw is this frame's
+// already-known raw head yaw (set earlier this same frame by
+// android_sauer_set_eye()), so solving androidBodyYaw = spawnyaw -
+// androidEyeYaw makes their sum (used everywhere camera1->yaw gets set,
+// see setcammatrix() below) equal spawnyaw immediately, without waiting
+// for a snap-turn or any further head movement.
+void android_sauer_align_spawn_yaw(float spawnyaw)
+{
+    androidBodyYaw = spawnyaw - androidEyeYaw;
+}
+
 // Right controller's current aim pose, set once per frame by
 // android_sauer_set_aim() (sauerquest_vr_bootstrap.c) -- decouples
 // weapon aiming/shooting from head direction (the confirmed scope for
@@ -801,6 +812,11 @@ bool androidgetaim(vec &pos, vec &dir, float &yaw, float &pitch)
 // Desktop stub -- fpsgame/render.cpp's drawhudmodel() calls this
 // unconditionally (see iengine.h), always falling back to head-aim here.
 bool androidgetaim(vec &pos, vec &dir, float &yaw, float &pitch) { return false; }
+
+// Desktop stub -- fpsgame/fps.cpp's spawnplayer() calls this
+// unconditionally (see iengine.h); a no-op here since head yaw already
+// *is* d->yaw on desktop, by construction of mouse-look.
+void android_sauer_align_spawn_yaw(float spawnyaw) {}
 #endif
 
 void setcammatrix()

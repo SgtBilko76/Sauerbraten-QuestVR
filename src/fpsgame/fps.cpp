@@ -331,6 +331,14 @@ namespace game
     void spawnplayer(fpsent *d)   // place at random spawn
     {
         pickgamespawn(d);
+        // On Android, camera1->yaw is driven by head tracking + the
+        // persistent snap-turn body-yaw offset every frame (setcammatrix(),
+        // rendergl.cpp), completely independent of d->yaw -- so without
+        // this, the map's intended spawnpoint facing (just set above, in
+        // findplayerspawn()) has no effect at all, and the player instead
+        // spawns facing whatever direction they happen to be physically
+        // oriented in the room. No-op on desktop.
+        if(d==player1) android_sauer_align_spawn_yaw(d->yaw);
         spawnstate(d);
         if(d==player1)
         {
