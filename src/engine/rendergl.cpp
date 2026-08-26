@@ -2165,6 +2165,21 @@ void gl_drawframe()
 
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
+    // Confirmed on-device via a temporary diagnostic (since removed):
+    // GL_BLEND was already enabled at this exact point, before this
+    // function does anything of its own -- leaked forward from whatever
+    // UI/HUD blending the previous frame's gl_drawhud() left active
+    // (exact leak site not isolated; gl_drawhud() and several effects
+    // upstream of it enable/disable GL_BLEND in several places, any one
+    // of which skipping its own disable on some code path would explain
+    // it). With blending still on, opaque world geometry gets composited
+    // against whatever's already in the framebuffer instead of fully
+    // overwriting it -- reported as walls and other geometry being
+    // partially see-through. Resetting explicitly here, rather than
+    // continuing to hunt the exact leak through gl_drawhud()'s many
+    // enable/disable pairs, guarantees correct state for world rendering
+    // regardless of what leaked in.
+    glDisable(GL_BLEND);
 
     xtravertsva = xtraverts = glde = gbatches = 0;
 
