@@ -72,7 +72,10 @@ int REFRESH	            = 0;
 // positioning/math bug (an earlier diagnostic already ruled that out:
 // the gun's computed position/orientation is identical between both
 // eyes every frame). 1.0 removes the extra multiplier on top of the
-// runtime's own already-oversampled recommended resolution.
+// runtime's own already-oversampled recommended resolution. This is the
+// safe baseline for Quest 2; bumped per-device for Quest 3's stronger
+// GPU once systemProperties.systemName is known (see the "meta" system
+// properties block below).
 float SS_MULTIPLIER    = 1.0f;
 
 GLboolean stageSupported = GL_FALSE;
@@ -1562,6 +1565,22 @@ void TBXR_InitRenderer(  ) {
         systemProperties.type = XR_TYPE_SYSTEM_PROPERTIES;
         systemProperties.next = &colorSpacePropertiesFB;
         OXR(xrGetSystemProperties(gAppState.Instance, gAppState.SystemId, &systemProperties));
+
+        ALOGV("System Name: %s", systemProperties.systemName);
+
+        // Quest 3's Adreno 740 has meaningfully more GPU headroom than
+        // Quest 2's Adreno 650 -- the flat SS_MULTIPLIER=1.0 above (see
+        // its own comment: chosen specifically to fix a measured
+        // GPU-bound frame-drop at 1.3 on this same device) was tuned
+        // conservatively for whichever device happened to be connected
+        // at the time, not per-model. systemName is populated by the
+        // xrGetSystemProperties() call just above regardless of which
+        // Quest is running this build, so this applies automatically --
+        // no separate per-device APK needed. Quest 2 (and anything not
+        // recognized as Quest 3) keeps the safe 1.0 baseline.
+        if (strstr(systemProperties.systemName, "Quest 3") != NULL) {
+            SS_MULTIPLIER = 1.2f;
+        }
 
         // Enumerate the supported color space options for the system.
         {
