@@ -734,6 +734,19 @@ void android_sauer_set_eye(float dx, float dy, float dz,
     androidEyeTanD = tanDown;
 }
 
+// Snap-turn locomotion's persistent rotation, added on top of raw head
+// yaw (androidEyeYaw) wherever camera1->yaw gets set below -- the
+// body-yaw/head-yaw split noted as still-pending in earlier phases (no
+// locomotion existed yet then). A snap turn doesn't move the real head
+// at all, so it has to live in a value that isn't overwritten every
+// frame by fresh head tracking, unlike androidEyeYaw itself.
+static float androidBodyYaw = 0;
+
+void android_sauer_snap_turn(float degrees)
+{
+    androidBodyYaw += degrees;
+}
+
 // Right controller's current aim pose, set once per frame by
 // android_sauer_set_aim() (sauerquest_vr_bootstrap.c) -- decouples
 // weapon aiming/shooting from head direction (the confirmed scope for
@@ -814,12 +827,18 @@ void setcammatrix()
     // same head-tracked values -- e.g. the crosshair raycast a few lines
     // down, and drawhudmodel()'s viewmodel orientation, until Phase 6
     // replaces both with the controller's own transform.
-    camera1->yaw = androidEyeYaw;
+    // androidBodyYaw is snap-turn locomotion's persistent rotation (see
+    // its own comment) -- added on top of the raw tracked head yaw here,
+    // the one place camera1's actual facing direction gets established,
+    // so every reader of camera1->yaw (aim, movement, this cammatrix
+    // rotation itself) automatically sees turns applied consistently.
+    float totalYaw = androidEyeYaw + androidBodyYaw;
+    camera1->yaw = totalYaw;
     camera1->pitch = androidEyePitch;
     camera1->roll = androidEyeRoll;
     cammatrix.rotate_around_y(androidEyeRoll*RAD);
     cammatrix.rotate_around_x(androidEyePitch*-RAD);
-    cammatrix.rotate_around_z(androidEyeYaw*-RAD);
+    cammatrix.rotate_around_z(totalYaw*-RAD);
     // androidEyeOffsetMeters is head-relative (it rotates with wherever
     // the player is currently looking -- the IPD offset always points
     // "to the left/right of view", not to some fixed compass direction),

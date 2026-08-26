@@ -1185,6 +1185,16 @@ void android_sauer_fire(int isdown)
 {
     game::doattack(isdown != 0);
 }
+
+void android_sauer_set_move(float sideways, float forward)
+{
+    if(minimized || mainmenu) { camera1->move = camera1->strafe = 0; return; }
+    static const float deadzone = 0.15f;
+    camera1->move = forward > deadzone ? 1 : (forward < -deadzone ? -1 : 0);
+    // Confirmed on-device: the naive direct sign mapping (positive
+    // joystick.x -> positive strafe) was left/right-reversed.
+    camera1->strafe = sideways > deadzone ? -1 : (sideways < -deadzone ? 1 : 0);
+}
 #endif
 
 #if defined(WIN32) && !defined(_DEBUG) && !defined(__GNUC__)
