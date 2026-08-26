@@ -1331,7 +1331,26 @@ void g3d_focusfield(char *name)
 COMMAND(g3d_focusfield, "s");
 
 VARNP(guifollow, useguifollow, 0, 1, 1);
+#ifdef __ANDROID__
+// Forced off: in-game GUI_2D windows (scoreboard, the pause/options menu
+// reached via ESCAPE while playing -- data/menus.cfg's togglemainmenu)
+// render as flat, depth-less ortho content (g3d_addgui()'s own
+// mainmenu==true special case still keeps the *boot* main menu on the
+// mono Quad/Cylinder composition layer regardless of this cap, so that
+// path is unaffected). Submitted through the real per-eye asymmetric-FOV
+// stereo projection layer, flat content gets warped differently per eye
+// by the compositor's own lens-distortion correction and never fuses --
+// confirmed on-device via a one-eye-closed-at-a-time test, same
+// root-cause category the crosshair and gameplay-HUD fixes already
+// solved. Capping this off routes those windows into the engine's own
+// pre-existing gui3d path instead (hudmatrix = camprojmatrix; ..., just
+// below in gui::start()) -- a real world-positioned panel with genuine
+// per-eye depth, already used by any desktop mod that disables this same
+// cvar, so no new rendering path is needed here at all.
+VARNP(gui2d, usegui2d, 0, 0, 0);
+#else
 VARNP(gui2d, usegui2d, 0, 1, 1);
+#endif
 
 void g3d_addgui(g3d_callback *cb, vec &origin, int flags)
 {

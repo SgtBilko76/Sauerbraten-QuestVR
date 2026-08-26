@@ -2484,6 +2484,65 @@ VAR(statrate, 1, 200, 1000);
 
 FVARP(conscale, 1e-3f, 0.33f, 1e3f);
 
+#ifdef __ANDROID__
+// Confirmed on-device: the flat gameplay HUD (health/ammo/weapon icons,
+// drawn via game::gameplayhud() below) is laid out in fixed pixel units
+// that map 1:1 onto the eye buffer's actual resolution -- correct on a
+// desktop monitor (a narrow ~40-50 degree FOV at normal viewing
+// distance), but the same pixel-relative sizes now span the Quest's much
+// wider per-eye FOV (~100+ degrees), so elements that used to sit
+// comfortably in central vision end up both visually oversized and
+// pushed out toward the edge of a FOV wider than comfortable eye
+// rotation covers -- reported as the HUD being "too near"/"too big" and
+// hard to actually look at. Fraction of the original on-screen size the
+// HUD plane below is solved to occupy; tune live via /vrhudscale.
+VARP(vrhudscale, 8, 20, 100);
+
+// World units in front of the head to place the HUD plane (see
+// androidsethudmatrixheadlocked() below) -- purely a comfort/fusion
+// distance, since vrhudscale's formula keeps the apparent on-screen size
+// constant regardless of this value.
+VARP(vrhuddist, 2, 8, 200);
+
+// Head-locked HUD plane, used only around the actual gameplay HUD draw
+// calls (game::gameplayhud()/rendertexturepanel() below) -- NOT the base
+// hudmatrix used for full-screen effects like the damage flash/compass,
+// which still need genuine full-FOV ortho coverage.
+//
+// Root cause (confirmed on-device): pure screen-space ortho content has
+// no real depth, so when submitted through the real per-eye
+// asymmetric-FOV stereo projection layer, the compositor's own per-eye
+// lens-distortion correction warps it differently for each eye -- each
+// eye's own image looks fine alone, but the two never fuse into one
+// (confirmed via a one-eye-closed-at-a-time test). This is the exact
+// same root-cause category the crosshair fix already solved for a
+// single point (drawcrosshair(), projecting worldpos through this eye's
+// own camprojmatrix instead of drawing at a fixed screen position) --
+// generalized here to an entire plane of content instead of one point.
+// A cheaper, purely-2D fix (a constant NDC-space skew on the flat
+// hudmatrix, mirroring the crosshair's own math) was tried previously
+// for the scoreboard and had no effect -- the fusion problem needs an
+// actual 3D point with real per-eye parallax, not a 2D approximation of
+// one, which is what this does instead: the same pixel-space coordinates
+// game::gameplayhud() already draws with are placed on a real plane
+// vrhuddist world units in front of the head and projected through this
+// eye's own real projmatrix (the same asymmetric frustum used for
+// gameplay itself, still valid at this point in the frame -- proven by
+// the crosshair's own working use of camprojmatrix, which is just
+// projmatrix combined with cammatrix, at this same late point in the
+// frame).
+void androidsethudmatrixheadlocked(int w, int h)
+{
+    float s = vrhudscale/100.0f;
+    float halfw = s*vrhuddist*(androidEyeTanR - androidEyeTanL)*0.5f;
+    float halfh = s*vrhuddist*(androidEyeTanU - androidEyeTanD)*0.5f;
+    hudmatrix = projmatrix;
+    hudmatrix.translate(0, 0, -vrhuddist);
+    hudmatrix.scale(2*halfw/w, -2*halfh/h, 1);
+    hudmatrix.translate(-w*0.5f, -h*0.5f, 0);
+}
+#endif
+
 void gl_drawhud()
 {
     g3d_render();
@@ -2651,6 +2710,10 @@ void gl_drawhud()
             pophudmatrix();
         }
 
+#ifdef __ANDROID__
+        bool vrheadlockhud = !mainmenu;
+        if(vrheadlockhud) { pushhudmatrix(); androidsethudmatrixheadlocked(w, h); flushhudmatrix(); }
+#endif
         if(hidestats || (!editmode && !showeditstats))
         {
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -2659,11 +2722,25 @@ void gl_drawhud()
         }
 
         rendertexturepanel(w, h);
+#ifdef __ANDROID__
+        if(vrheadlockhud) pophudmatrix();
+#endif
     }
 
     glDisable(GL_BLEND);
 
     g3d_limitscale((2*limitgui - conh) / float(conh));
+    // The scoreboard and in-game pause/options menu (both reached via
+    // showgui while a game is running -- data/menus.cfg's
+    // togglemainmenu) also draw here, through the same doubling bug the
+    // gameplay HUD above had. Wrapping this call in the same
+    // head-locked-plane hudmatrix trick had NO effect (confirmed
+    // on-device): gui::start() (3dgui.cpp) unconditionally rebuilds
+    // hudmatrix from scratch for every 2D gui window it draws, discarding
+    // whatever was set here first. Fixed instead at the source -- see
+    // usegui2d's cap (3dgui.cpp) and scoreboard2d's cap (scoreboard.cpp)
+    // on Android, which route these windows into the engine's own
+    // pre-existing real-3D gui path instead.
     g3d_render2d();
 
     glEnable(GL_BLEND);
