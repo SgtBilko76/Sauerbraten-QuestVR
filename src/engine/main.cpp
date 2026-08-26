@@ -1220,6 +1220,12 @@ void android_sauer_menu_back(int isdown)
 {
     if(isdown) cleargui(1);
 }
+
+void android_sauer_weapon_cycle(int dir)
+{
+    processkey(dir > 0 ? -4 : -5, true);
+    processkey(dir > 0 ? -4 : -5, false);
+}
 #endif
 
 #if defined(WIN32) && !defined(_DEBUG) && !defined(__GNUC__)

@@ -352,6 +352,20 @@ static void SauerQuest_UpdateLocomotion(void)
     } else {
         snapState = 0;
     }
+
+    /* Right stick Y axis -> weapon cycle, same threshold-crossing
+     * edge-detection as snap-turn above (one step per crossing, not
+     * continuous while held past it). Up = next weapon, down = previous,
+     * matching desktop's mouse-wheel-up/-down (delta_do 1/-1). */
+    static int weaponCycleState = 0; /* -1 = past down threshold, 1 = past up, 0 = neither */
+    float turny = rightTrackedRemoteState_new.Joystick.y;
+    if (turny > threshold) {
+        if (weaponCycleState != 1) { android_sauer_weapon_cycle(1); weaponCycleState = 1; }
+    } else if (turny < -threshold) {
+        if (weaponCycleState != -1) { android_sauer_weapon_cycle(-1); weaponCycleState = -1; }
+    } else {
+        weaponCycleState = 0;
+    }
 }
 
 /* Left controller: index trigger -> jump, Menu button -> ESCAPE
