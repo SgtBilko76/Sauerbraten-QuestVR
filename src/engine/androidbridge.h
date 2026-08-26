@@ -123,6 +123,15 @@ void android_sauer_set_move(float sideways, float forward);
 // (Sauerbraten's own convention: increasing yaw turns left).
 void android_sauer_snap_turn(float degrees);
 
+// Implemented in main.cpp; these three route through processkey() the
+// exact same way desktop's own SPACE/ESCAPE/TAB key events do (see
+// main.cpp's SDL_KEYDOWN/UP handling), so they pick up whatever those
+// keys are bound to (defaults.cfg: SPACE->jump, ESCAPE->togglemainmenu,
+// TAB->showscores) rather than duplicating that binding logic here.
+void android_sauer_jump(int isdown);
+void android_sauer_menu(int isdown);
+void android_sauer_tab(int isdown);
+
 #ifdef __cplusplus
 }
 #endif
