@@ -947,6 +947,26 @@ void QuatToYawPitchRoll(XrQuaternionf q, vec3_t rotation, vec3_t out) {
 	XrVector3f upNormal = normalizeVec(up);
 
 	GetAnglesFromVectors(forwardNormal, rightNormal, upNormal, out);
+
+	/* This function (and GetAnglesFromVectors() above it) is vendored from
+	 * a Quake/DarkPlaces-family reference (QuakeQuest/TBXR) -- confirmed
+	 * on-device that its raw yaw/pitch sign convention is the OPPOSITE of
+	 * Sauerbraten/Cube2's own (vecfromyawpitch() in physics.cpp: increasing
+	 * yaw turns left, positive pitch looks up). Both of this function's
+	 * two live callers feed directly into Sauerbraten camera/aim state
+	 * (TBXR_GetHMDOrientation()'s hmdorientation -> rendergl.cpp's
+	 * camera1->yaw/pitch, and sauerquest_vr_bootstrap.c's
+	 * SauerQuest_UpdateWeaponAim() -> androidgetaim()'s aim direction), so
+	 * negating here once, at the source, is simpler and safer than
+	 * negating at each of those call sites separately. Confirmed
+	 * on-device before this fix: turning the head right made the world
+	 * turn right too (should turn left), and pointing the controller up
+	 * made the weapon point down (should point up) -- both corrected by
+	 * this negation. Roll deliberately left unflipped -- not reported as
+	 * wrong, and this project has no head/controller roll-driven behavior
+	 * to have surfaced a bug in it either way. */
+	out[0] = -out[0];
+	out[1] = -out[1];
 }
 
 /*
