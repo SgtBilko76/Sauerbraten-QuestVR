@@ -9,7 +9,7 @@ android {
         applicationId "org.sauerquest.vr"
         minSdkVersion 29
         targetSdkVersion 32
-        versionCode 3
+        versionCode 4
         versionName "0.0.1"
 
         externalNativeBuild {
