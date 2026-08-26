@@ -54,10 +54,26 @@ PFNEGLSIGNALSYNCKHRPROC			eglSignalSyncKHR;
 PFNEGLGETSYNCATTRIBKHRPROC		eglGetSyncAttribKHR;
 #endif
 
-//Let's go to the maximum!
 int NUM_MULTI_SAMPLES	= 1;
 int REFRESH	            = 0;
-float SS_MULTIPLIER    = 1.3f;
+// Was 1.3f ("Let's go to the maximum!", vendored from the QuakeQuest
+// reference this file is based on) -- confirmed on-device as the actual
+// cause of a reported "doubled"/ghosted weapon viewmodel during real
+// gameplay: real bot-match scenes (duel7's reflections/particles/
+// dynamic lighting) render at only ~59/72fps under 100% GPU load at that
+// multiplier (logcat's VrApi FPS=59/72,GPU%=1.00,Stale=15-25 line), so
+// the compositor's async timewarp reprojects a large fraction of frames
+// every second. ATW only corrects reprojected frames for head rotation,
+// not controller-tracked motion, so a hand-held object keeps showing its
+// stale, now-outdated position during those reprojected frames while
+// head-relative world geometry (which ATW does compensate) stays
+// artificially stable -- exactly the "moves with the controller but
+// stays offset, like a persistent shadow" symptom reported, not a
+// positioning/math bug (an earlier diagnostic already ruled that out:
+// the gun's computed position/orientation is identical between both
+// eyes every frame). 1.0 removes the extra multiplier on top of the
+// runtime's own already-oversampled recommended resolution.
+float SS_MULTIPLIER    = 1.0f;
 
 GLboolean stageSupported = GL_FALSE;
 
