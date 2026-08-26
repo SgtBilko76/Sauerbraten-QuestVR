@@ -2261,6 +2261,20 @@ void gl_drawframe()
     renderedgame = false;
 }
 
+#ifdef __ANDROID__
+// Confirmed on-device: the main menu (using ordinary SDR assets, same
+// brightness/color values as intended for a desktop monitor viewed from
+// a normal distance in a lit room) reads as too bright/washed out
+// through a VR lens a few centimeters from the eye in an otherwise dark
+// headset -- a well-known perceptual difference when migrating desktop
+// content to VR, not a rendering bug (ruled out: the background draws
+// at plain full brightness with standard blending, no wrong colorspace,
+// no double-layering). A flat darkening overlay drawn on top of
+// everything is the standard comfort fix. Percentage of full black;
+// tune live via /vrmenudim.
+VARP(vrmenudim, 0, 50, 100);
+#endif
+
 void gl_drawmainmenu()
 {
     xtravertsva = xtraverts = glde = gbatches = 0;
@@ -2269,6 +2283,22 @@ void gl_drawmainmenu()
     renderpostfx();
 
     gl_drawhud();
+
+#ifdef __ANDROID__
+    if(vrmenudim > 0)
+    {
+        int w = screenw, h = screenh;
+        if(forceaspect) w = int(ceil(h*forceaspect));
+        hudmatrix.ortho(0, w, h, 0, -1, 1);
+        resethudmatrix();
+        hudnotextureshader->set();
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        gle::colorf(0, 0, 0, vrmenudim/100.0f);
+        hudquad(0, 0, w, h);
+        glDisable(GL_BLEND);
+    }
+#endif
 }
 
 VARNP(damagecompass, usedamagecompass, 0, 1, 1);

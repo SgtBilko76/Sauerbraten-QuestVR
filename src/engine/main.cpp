@@ -1215,6 +1215,11 @@ void android_sauer_tab(int isdown)
 {
     processkey(SDLK_TAB, isdown != 0);
 }
+
+void android_sauer_menu_back(int isdown)
+{
+    if(isdown) cleargui(1);
+}
 #endif
 
 #if defined(WIN32) && !defined(_DEBUG) && !defined(__GNUC__)
