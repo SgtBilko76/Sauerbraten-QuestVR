@@ -141,6 +141,16 @@ void android_sauer_jump(int isdown);
 void android_sauer_menu(int isdown);
 void android_sauer_tab(int isdown);
 
+// Implemented in main.cpp; pops one level off the gui menu stack
+// (cleargui(1), the same "go back" step togglemainmenu itself falls
+// back to before opening the top-level main screen) -- unlike
+// android_sauer_menu() above (ESCAPE/togglemainmenu, which can also
+// OPEN the menu from nothing), this only ever goes back/closes, never
+// opens, matching a console-style "B = back" convention. Fires once per
+// press, ignores release; safe to call with no menu open (cleargui(1)
+// itself no-ops on an empty stack).
+void android_sauer_menu_back(int isdown);
+
 #ifdef __cplusplus
 }
 #endif

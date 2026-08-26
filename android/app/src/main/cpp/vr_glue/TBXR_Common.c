@@ -1585,7 +1585,19 @@ void TBXR_InitRenderer(  ) {
                 ALOGV("%d:%d", i, colorSpaces[i]);
             }
 
-            const XrColorSpaceFB requestColorSpace = XR_COLOR_SPACE_REC2020_FB;
+            // Confirmed on-device: the main menu (and, more subtly,
+            // gameplay) looked washed out/overexposed -- REC2020 is a
+            // wide-gamut colorspace meant for actual HDR-authored
+            // content, but every asset in this game (menu graphics,
+            // textures) is ordinary SDR content authored for a standard
+            // sRGB-like display. Displaying sRGB pixel values as if they
+            // were REC2020 stretches them across REC2020's wider gamut,
+            // which reads as oversaturated/blown-out -- most visible on
+            // the menu's bright, colorful UI, less obvious on typical
+            // muted game-world textures but still technically wrong.
+            // REC709 is the standard SDR colorspace matching how this
+            // content was actually authored.
+            const XrColorSpaceFB requestColorSpace = XR_COLOR_SPACE_REC709_FB;
 
             PFN_xrSetColorSpaceFB pfnxrSetColorSpaceFB = NULL;
             OXR(xrGetInstanceProcAddr(

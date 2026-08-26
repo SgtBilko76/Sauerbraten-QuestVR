@@ -391,6 +391,24 @@ static void SauerQuest_UpdateLeftButtons(void)
     }
 }
 
+/* Right controller: B button -> "go back" one menu level
+ * (android_sauer_menu_back(), main.cpp -- cleargui(1)), console-style,
+ * distinct from the left Menu button's ESCAPE/togglemainmenu (which can
+ * also OPEN the menu from nothing). Edge-detected like every other
+ * button here; cleargui(1) itself safely no-ops with no menu open, so
+ * this is left ungated rather than checking android_sauer_is_menu_open()
+ * first. */
+static void SauerQuest_UpdateRightButtons(void)
+{
+    static bool backWasDown = false;
+
+    bool backDown = (rightTrackedRemoteState_new.Buttons & xrButton_B) != 0;
+    if (backDown != backWasDown) {
+        android_sauer_menu_back(backDown ? 1 : 0);
+        backWasDown = backDown;
+    }
+}
+
 void VR_HandleControllerInput(void)
 {
     SauerQuest_UpdateMenuScreenAnchor();
@@ -400,6 +418,7 @@ void VR_HandleControllerInput(void)
     SauerQuest_UpdateWeaponFire();
     SauerQuest_UpdateLocomotion();
     SauerQuest_UpdateLeftButtons();
+    SauerQuest_UpdateRightButtons();
 }
 
 void VR_Shutdown(void)
