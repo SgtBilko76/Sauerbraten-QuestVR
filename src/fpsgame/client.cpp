@@ -1493,6 +1493,14 @@ namespace game
                 parsestate(s, p);
                 s->state = CS_ALIVE;
                 pickgamespawn(s);
+                // The actual respawn path for any m_mp() mode (FFA/duel7
+                // included, even in a local bot match -- see
+                // respawnself()'s N_TRYSPAWN, fps.cpp) goes through here,
+                // not spawnplayer() -- confirmed on-device as the reason
+                // an earlier fix hooking only spawnplayer() had no effect.
+                // See android_sauer_align_spawn_yaw()'s own comment
+                // (iengine.h) for why this is needed at all on Android.
+                if(s==player1) android_sauer_align_spawn_yaw(s->yaw);
                 if(s == player1)
                 {
                     showscores(false);
