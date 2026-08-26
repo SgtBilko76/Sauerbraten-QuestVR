@@ -17,7 +17,25 @@ void cleanupglare()
 }
 
 VARFP(glaresize, 6, 8, 10, cleanupglare());
+#ifdef __ANDROID__
+// Confirmed on-device: enabling glare (either via a persisted config
+// setting, or the options menu's postfx screen) crashes intermittently
+// with a NULL-pointer SIGSEGV inside gle::end(), reached via
+// drawglaretex() -> glaretexture::dorender() -> drawglare() ->
+// renderwater() -> flushwater() -> flushwaterstrips() -- i.e. only when
+// the glare pass's own *nested* render-to-texture re-render of the scene
+// includes visible water. Root cause not fully isolated (gle::'s shared
+// vertex-buffer state -- attribbuf/vbo/vbooffset -- is namespace-global
+// state also used successfully by every other draw call every frame, so
+// this isn't a simple "always-null pointer"; likely a boundary/overflow
+// condition specific to some water geometry sizes only reached through
+// this nested pass). Capping the max to 0 disables the feature outright
+// on this platform rather than leaving a known, reproducible crash
+// reachable through a graphics options toggle.
+VARP(glare, 0, 0, 0);
+#else
 VARP(glare, 0, 0, 1);
+#endif
 VARP(blurglare, 0, 4, 7);
 VARP(blurglareaspect, 0, 1, 1);
 VARP(blurglaresigma, 1, 50, 200);
