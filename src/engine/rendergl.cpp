@@ -2273,6 +2273,29 @@ void gl_drawframe()
 // everything is the standard comfort fix. Percentage of full black;
 // tune live via /vrmenudim.
 VARP(vrmenudim, 0, 50, 100);
+
+// Same fix, separately tunable, for actual gameplay (gl_drawframe(), via
+// gl_drawhud() below) -- confirmed on-device as the same perceptual
+// effect, just less obvious against gameplay's typically darker/more
+// detailed textures than the menu's bright flat background, until
+// specifically looked for. Also folds in the "no dynamic lighting
+// visible" report: with the whole scene overexposed, a dynamic light's
+// actual contrast against its surroundings gets crushed toward white
+// long before the light itself would -- this isn't lighting being
+// disabled, it's a symptom of the same overbrightness. Tune live via
+// /vrgamedim.
+VARP(vrgamedim, 0, 30, 100);
+
+static void drawvrdim(int amount, int w, int h)
+{
+    if(amount <= 0) return;
+    hudnotextureshader->set();
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    gle::colorf(0, 0, 0, amount/100.0f);
+    hudquad(0, 0, w, h);
+    glDisable(GL_BLEND);
+}
 #endif
 
 void gl_drawmainmenu()
@@ -2285,19 +2308,11 @@ void gl_drawmainmenu()
     gl_drawhud();
 
 #ifdef __ANDROID__
-    if(vrmenudim > 0)
-    {
-        int w = screenw, h = screenh;
-        if(forceaspect) w = int(ceil(h*forceaspect));
-        hudmatrix.ortho(0, w, h, 0, -1, 1);
-        resethudmatrix();
-        hudnotextureshader->set();
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        gle::colorf(0, 0, 0, vrmenudim/100.0f);
-        hudquad(0, 0, w, h);
-        glDisable(GL_BLEND);
-    }
+    int w = screenw, h = screenh;
+    if(forceaspect) w = int(ceil(h*forceaspect));
+    hudmatrix.ortho(0, w, h, 0, -1, 1);
+    resethudmatrix();
+    drawvrdim(vrmenudim, w, h);
 #endif
 }
 
@@ -2840,6 +2855,10 @@ void gl_drawhud()
     pophudmatrix();
 
     drawcrosshair(w, h);
+
+#ifdef __ANDROID__
+    if(!mainmenu) drawvrdim(vrgamedim, w, h);
+#endif
 
     glDisable(GL_BLEND);
 }
