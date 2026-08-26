@@ -216,7 +216,23 @@ void renderflatwater(int x, int y, int z, int rsize, int csize, int mat)
     vertwn(x,       y+csize, z);
 }
 
+#ifdef __ANDROID__
+// Confirmed on-device: the vertex-animated ("wavy") water path
+// (rendervertwater() -> flushwaterstrips() -> gle::end()) crashes with a
+// reproducible NULL-pointer SIGSEGV -- and NOT only when reached through
+// the glare pass (an earlier fix disabled glare outright after first
+// finding this crash there): the identical backtrace recurred called
+// directly from gl_drawframe()'s own normal, always-active renderwater()
+// call, with glare already disabled. So this is a genuine bug in vertex
+// water rendering itself on this platform, not something specific to
+// glare's nested re-render. Forcing vertwater off makes renderwater()
+// (water.cpp) always take the renderflatwater() path instead, which
+// doesn't go through flushwaterstrips()/gle::end() at all -- flat
+// (non-wavy) water, but stable.
+VARFP(vertwater, 0, 0, 0, allchanged());
+#else
 VARFP(vertwater, 0, 1, 1, allchanged());
+#endif
 
 static inline void renderwater(const materialsurface &m, int mat = MAT_WATER)
 {
