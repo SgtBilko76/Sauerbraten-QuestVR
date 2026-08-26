@@ -2393,6 +2393,33 @@ void drawcrosshair(int w, int h)
             crosshair = crosshairs[index];
         }
         chsize = crosshairsize*w/900.0f;
+#ifdef __ANDROID__
+        // Desktop's crosshair is always screen-center because desktop aims
+        // with the head/mouse-look direction itself, so "center of view" and
+        // "aim point" are the same thing by construction. This port's
+        // controller-aimed weapon (worldpos, set in setcammatrix() from
+        // androidgetaim()) decouples them -- leaving cx/cy at (0.5, 0.5)
+        // here draws the reticle at the head-view center while the actual
+        // shot travels toward wherever the controller is pointed, which
+        // visibly diverges the moment the two aren't aligned (confirmed
+        // on-device: reported as looking "doubled" and as if the crosshair
+        // "moves with my head, not my gun"). Projecting worldpos through
+        // this eye's own camprojmatrix instead gives the reticle's true
+        // screen position for THIS eye specifically -- since it's a real
+        // world-space point run through each eye's own (distinct,
+        // asymmetric-FOV) projection, same as any other world object, it
+        // naturally gets correct per-eye parallax too.
+        if(!mainmenu)
+        {
+            vec4 clip;
+            camprojmatrix.transform(worldpos, clip);
+            if(clip.w > 1e-4f && clip.z >= -clip.w)
+            {
+                cx = 0.5f + (clip.x/clip.w)*0.5f;
+                cy = 0.5f - (clip.y/clip.w)*0.5f;
+            }
+        }
+#endif
     }
     if(crosshair->type&Texture::ALPHA) glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     else glBlendFunc(GL_ONE, GL_ONE);
