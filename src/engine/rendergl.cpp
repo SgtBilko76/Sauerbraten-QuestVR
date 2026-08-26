@@ -717,8 +717,16 @@ static float androidEyeTanL = -1, androidEyeTanR = 1, androidEyeTanU = 1, androi
 // ~1.6-1.7m/~0.3-0.4m human), exposed as a cvar since getting this exactly
 // right needs on-device tuning ("does leaning a real 10cm forward move
 // the view a sensible amount"), not something derivable purely from
-// source.
-VARP(vrworldscale, 1, 10, 1000);
+// source. Was 10 -- confirmed on-device as slightly too large: a
+// too-large scale exaggerates the per-eye IPD offset applied in
+// setcammatrix() below beyond the real IPD's true equivalent in world
+// units, which shows up specifically as near objects (including the
+// viewmodel) being harder to stereo-fuse ("slightly doubled") while
+// distant objects look fine, since a fixed angular/scale error matters
+// far more for close parallax than far. 8 (VARP is integer-only) is
+// closer to the eyeheight-based estimate above (14 units / ~1.65m ~=
+// 8.5) than 10 was.
+VARP(vrworldscale, 1, 8, 1000);
 
 void android_sauer_set_eye(float dx, float dy, float dz,
                             float yaw, float pitch, float roll,
