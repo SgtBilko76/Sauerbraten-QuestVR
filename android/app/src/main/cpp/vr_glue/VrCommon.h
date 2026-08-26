@@ -54,10 +54,15 @@ extern vec3_t hmdorientation;
  * layer curves around (how far away the screen is); WIDTH/HEIGHT are its
  * physical size in meters -- deliberately explicit constants rather than
  * derived from the swapchain's own pixel aspect ratio, so the raycast
- * math doesn't need to re-read swapchain dimensions to match. */
-#define SAUERQUEST_MENU_SCREEN_DISTANCE 2.2f
-#define SAUERQUEST_MENU_SCREEN_WIDTH    2.8f
-#define SAUERQUEST_MENU_SCREEN_HEIGHT   3.0f
+ * math doesn't need to re-read swapchain dimensions to match.
+ *
+ * Confirmed on-device: the previous 2.2m/2.8m/3.0m values subtended
+ * roughly 65x69 degrees of FOV -- like sitting a few inches from a large
+ * TV -- reported as "too near"/"too big" to comfortably read. These
+ * values instead target a more monitor-like ~37x39 degrees. */
+#define SAUERQUEST_MENU_SCREEN_DISTANCE 3.3f
+#define SAUERQUEST_MENU_SCREEN_WIDTH    2.2f
+#define SAUERQUEST_MENU_SCREEN_HEIGHT   2.35f
 
 /* Implemented in sauerquest_vr_bootstrap.c: the screen's pose (position
  * of the player-side axis + facing orientation), anchored once when the

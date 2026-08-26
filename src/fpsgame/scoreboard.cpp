@@ -3,7 +3,24 @@
 
 namespace game
 {
+#ifdef __ANDROID__
+    // Forced off: GUI_FORCE_2D bypasses g3d_addgui()'s own usegui2d check
+    // entirely, so it would keep rendering the scoreboard as flat,
+    // depth-less ortho content even with usegui2d itself capped off
+    // (rendergl.cpp/3dgui.cpp) -- confirmed on-device as the reason an
+    // earlier fix attempt (a head-locked-plane hudmatrix wrapped around
+    // g3d_render2d()) had no effect: gui::start() unconditionally
+    // rebuilds hudmatrix from scratch for gui2d windows, discarding
+    // whatever was set up before calling into it. Capping this forces
+    // the GUI_2D|GUI_FOLLOW branch below instead, which usegui2d's own
+    // cap correctly routes into the engine's existing real-3D,
+    // per-eye-correct gui window path (hudmatrix = camprojmatrix; ...,
+    // 3dgui.cpp) -- same fix as the crosshair/HUD, reusing an
+    // already-existing engine mechanism instead of a new one.
+    VARP(scoreboard2d, 0, 0, 0);
+#else
     VARP(scoreboard2d, 0, 1, 1);
+#endif
     VARP(showservinfo, 0, 1, 1);
     VARP(showclientnum, 0, 0, 1);
     VARP(showpj, 0, 0, 1);
