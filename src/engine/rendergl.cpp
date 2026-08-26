@@ -787,7 +787,12 @@ bool androidgetaim(vec &pos, vec &dir, float &yaw, float &pitch)
     vec offsetWorld;
     headrot.transposedtransformnormal(androidAimOffsetMeters, offsetWorld);
     pos = vec(camera1->o).add(offsetWorld.mul(float(vrworldscale)));
-    yaw = androidAimYaw;
+    // androidAimYaw is the controller's own raw tracked orientation
+    // (real-world/stage space) -- unlike camera1->yaw, it has no idea
+    // snap-turn (androidBodyYaw) has virtually rotated the world, so it
+    // needs the same offset added here or the gun/arm visibly stops
+    // turning with everything else on a snap turn (confirmed on-device).
+    yaw = androidAimYaw + androidBodyYaw;
     pitch = androidAimPitch;
     vecfromyawpitch(yaw, pitch, 1, 0, dir);
     return true;
