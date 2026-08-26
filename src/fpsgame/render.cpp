@@ -406,10 +406,15 @@ namespace game
     // World units the VR viewmodel is rendered at, from the head -- see
     // drawhudmodel()'s own comment for why this is fixed rather than the
     // controller's real tracked distance. vrworldscale (rendergl.cpp,
-    // default 10 units/meter) makes 4 units roughly 0.4m -- confirmed
-    // on-device that the previous 7 (0.7m) made the viewmodel look too
-    // small/far for a held weapon.
-    VARP(hudgunvrdist, 1, 4, 1000);
+    // default 10 units/meter) makes 5 units roughly 0.5m. Confirmed
+    // on-device that 7 (0.7m) looked too small/far, and that after
+    // fixing the gun's real per-eye projection (renderavatar(), this
+    // file), the residual stereo-fusion difficulty at 4 (0.4m) is
+    // consistent with genuine eye-vergence strain from an object that
+    // close (each eye's own image is clean, confirmed via a
+    // one-eye-closed test) rather than a remaining bug -- splitting the
+    // difference trades a little apparent size for easier fusion.
+    VARP(hudgunvrdist, 1, 5, 1000);
 #endif
 
     void drawhudmodel(fpsent *d, int anim, float speed = 0, int base = 0)
