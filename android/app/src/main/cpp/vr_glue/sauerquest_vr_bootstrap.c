@@ -291,6 +291,45 @@ static void SauerQuest_UpdateWeaponFire(void)
     }
 }
 
+/* Smooth-stick movement (left thumbstick) + snap-turn (right thumbstick,
+ * X axis) -- this port's locomotion, following the same left/right split
+ * QuakeQuest's own reference (vr_glue/reference/QuakeQuest_OpenXR.c) uses.
+ * android_sauer_set_move() itself no-ops on the main menu (main.cpp), so
+ * only snap-turn needs its own explicit menu gate here -- rotating
+ * camera1->yaw while the menu's cylinder/quad panel is on-screen would be
+ * pointless (that panel is positioned from a cached head-anchor, not
+ * camera1->yaw) and could only cause a stray jump once gameplay resumes. */
+static void SauerQuest_UpdateLocomotion(void)
+{
+    android_sauer_set_move(leftTrackedRemoteState_new.Joystick.x,
+                            leftTrackedRemoteState_new.Joystick.y);
+
+    if (android_sauer_is_mainmenu()) return;
+
+    /* Snap-turn fires once per crossing of the +/-0.7 threshold, not
+     * continuously while held past it -- same edge-detection pattern
+     * QuakeQuest's own reference uses for its snap-turn (and for this
+     * project's own trigger/click edge detection above). 45 degrees is a
+     * common, comfort-oriented snap-turn increment; positive turns the
+     * same direction increasing yaw already does (turn left, per
+     * Sauerbraten's own convention -- physics.cpp's vecfromyawpitch()). */
+    const float threshold = 0.7f;
+    const float snapdegrees = 45.0f;
+    static int snapState = 0; /* -1 = past left threshold, 1 = past right, 0 = neither */
+
+    // Confirmed on-device: the naive direct mapping (push right ->
+    // negative/turn-right) was left/right-reversed, same as sideways
+    // movement above -- flipped here too.
+    float turnx = rightTrackedRemoteState_new.Joystick.x;
+    if (turnx > threshold) {
+        if (snapState != 1) { android_sauer_snap_turn(snapdegrees); snapState = 1; }
+    } else if (turnx < -threshold) {
+        if (snapState != -1) { android_sauer_snap_turn(-snapdegrees); snapState = -1; }
+    } else {
+        snapState = 0;
+    }
+}
+
 void VR_HandleControllerInput(void)
 {
     SauerQuest_UpdateMenuScreenAnchor();
@@ -298,6 +337,7 @@ void VR_HandleControllerInput(void)
     SauerQuest_UpdateMenuPointer();
     SauerQuest_UpdateWeaponAim();
     SauerQuest_UpdateWeaponFire();
+    SauerQuest_UpdateLocomotion();
 }
 
 void VR_Shutdown(void)

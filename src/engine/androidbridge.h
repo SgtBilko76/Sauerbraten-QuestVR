@@ -101,6 +101,28 @@ void android_sauer_set_aim(float dx, float dy, float dz,
 // decide whether a trigger press should be this or a GUI click instead.
 void android_sauer_fire(int isdown);
 
+// Implemented in main.cpp; sets player1's held movement direction every
+// frame from the left thumbstick (this port's smooth-stick locomotion),
+// the same role desktop's held forward/back/strafe keys play. sideways/
+// forward are already deadzone-filtered, roughly [-1,1], but only their
+// sign is used -- Sauerbraten's own move/strafe fields (schar, ents.h)
+// are discrete on desktop too (a key is either held or not); the
+// "smooth" part of smooth-stick locomotion is the continuous per-tick
+// world-space motion those discrete flags drive, not multi-speed analog
+// throttling. Positive forward = move forward; sideways's sign is
+// flipped internally (main.cpp) from the naive direct joystick.x
+// mapping -- confirmed on-device as backwards otherwise.
+void android_sauer_set_move(float sideways, float forward);
+
+// Implemented in rendergl.cpp; adds to the persistent body-yaw offset
+// applied on top of raw head yaw (androidBodyYaw, alongside
+// androidEyeYaw et al) -- this port's snap-turn locomotion. Called once
+// per detected stick-past-threshold edge (sauerquest_vr_bootstrap.c),
+// not continuously, so each call is one discrete snap, positive
+// degrees turning the same direction increasing yaw already does
+// (Sauerbraten's own convention: increasing yaw turns left).
+void android_sauer_snap_turn(float degrees);
+
 #ifdef __cplusplus
 }
 #endif
