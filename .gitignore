@@ -7,6 +7,14 @@
 # Large third-party map/asset packages (not versioned; source data for asset scoping in Phase 9)
 /packages/
 
+# Full-content beta build's bundled assets (~1GB, copied wholesale from
+# /packages/ above for a "beta test with every map/song" build) --
+# local-only build artifact by request, not versioned. The curated
+# duel7-only subset this replaced WAS tracked; those paths are now
+# untracked (see the accompanying `git rm --cached`) rather than
+# deleted, since the full copy happens to still contain them.
+/android/app/src/main/assets/packages/
+
 # Desktop build artifacts
 *.o
 *.obj
