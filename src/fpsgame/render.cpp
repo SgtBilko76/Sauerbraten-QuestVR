@@ -402,6 +402,15 @@ namespace game
 
     SVARP(hudgunsdir, "");
 
+#ifdef __ANDROID__
+    // World units the VR viewmodel is rendered at, from the head -- see
+    // drawhudmodel()'s own comment for why this is fixed rather than the
+    // controller's real tracked distance. vrworldscale (rendergl.cpp,
+    // default 10 units/meter) makes 7 units roughly 0.7m, a typical
+    // comfortable VR weapon-hold distance.
+    VARP(hudgunvrdist, 1, 7, 1000);
+#endif
+
     void drawhudmodel(fpsent *d, int anim, float speed = 0, int base = 0)
     {
         if(d->gunselect>GUN_PISTOL) return;
@@ -428,6 +437,26 @@ namespace game
             {
                 gunyaw = aimyaw+90;
                 gunpitch = aimpitch;
+#ifdef __ANDROID__
+                // Push the RENDERED gun out to a fixed, comfortable
+                // stereo-fusion distance from the head instead of its
+                // literal tracked distance (confirmed on-device: at the
+                // controller's real, much closer distance, the same
+                // per-eye IPD parallax that's correct for normal world
+                // geometry becomes too wide an angle to comfortably fuse
+                // for a close hand-held object -- seen as persistent
+                // "doubled"/offset ghosting that moves with the controller
+                // but never fuses into one image). Only affects where the
+                // viewmodel is drawn -- the actual shoot/crosshair target
+                // (worldpos, set by a separate androidgetaim() call in
+                // rendergl.cpp's setcammatrix()) is untouched, so aiming
+                // accuracy doesn't change. Matches how most VR shooters
+                // render their viewmodel at a fixed comfortable depth
+                // rather than the controller's exact tracked distance.
+                vec togun(sway); togun.sub(camera1->o);
+                float dist = togun.magnitude();
+                if(dist > 1e-3f) sway = vec(camera1->o).add(togun.div(dist).mul(float(hudgunvrdist)));
+#endif
             }
         }
 
