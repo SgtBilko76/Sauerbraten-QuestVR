@@ -1171,6 +1171,11 @@ int android_sauer_is_mainmenu(void)
     return mainmenu;
 }
 
+int android_sauer_is_menu_open(void)
+{
+    return mainmenu || g3d_hasguiwindow();
+}
+
 void android_sauer_set_cursor(float x, float y)
 {
     g3d_setcursorpos(x, y);

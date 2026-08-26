@@ -74,6 +74,15 @@ void android_sauer_set_eye(float dx, float dy, float dz,
 // the normal stereo Projection layer used for real gameplay.
 int android_sauer_is_mainmenu(void);
 
+// Implemented in main.cpp; true whenever ANY gui window is showing --
+// the boot main menu (same as android_sauer_is_mainmenu() above) OR an
+// in-game one like the pause/options menu (ESCAPE) or scoreboard (TAB),
+// both of which render via the engine's own real-3D "floating panel" gui
+// path on Android (3dgui.cpp's usegui2d cap) rather than the boot menu's
+// separate mono composition layer. Used to decide whether the right
+// controller's trigger should click a menu instead of firing the weapon.
+int android_sauer_is_menu_open(void);
+
 // Implemented in 3dgui.cpp/main.cpp; let the right controller's raycast
 // against the main-menu "virtual screen" (see VR_UseScreenLayer()) drive
 // the existing 3D GUI cursor and click state, in place of desktop's

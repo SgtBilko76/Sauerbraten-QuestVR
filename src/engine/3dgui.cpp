@@ -1094,12 +1094,26 @@ struct gui : g3d_gui
                 }
                 else
                 {
+                    // On Android, aim this hit-test with the controller's
+                    // own tracked ray instead of head direction, same as
+                    // the weapon -- androidgetaim() (a no-op stub
+                    // returning false on desktop) is what already
+                    // decouples aiming from head direction project-wide,
+                    // so a 3D gui window (the in-game pause/options menu
+                    // and scoreboard, both routed through this gui3d path
+                    // via usegui2d's Android cap -- see 3dgui.cpp's own
+                    // VARNP(gui2d,...)) can be pointed at and clicked with
+                    // the controller instead of requiring the player to
+                    // physically look at it.
+                    vec rayorigin = camera1->o, raydir = camdir;
+                    vec aimpos, aimdir; float aimyaw, aimpitch;
+                    if(androidgetaim(aimpos, aimdir, aimyaw, aimpitch)) { rayorigin = aimpos; raydir = aimdir; }
                     plane p;
-                    p.toplane(vec(origin).sub(camera1->o).set(2, 0).normalize(), origin);
-                    if(p.rayintersect(camera1->o, camdir, dist) && dist>=0)
+                    p.toplane(vec(origin).sub(rayorigin).set(2, 0).normalize(), origin);
+                    if(p.rayintersect(rayorigin, raydir, dist) && dist>=0)
                     {
-                        vec hitpos(camdir);
-                        hitpos.mul(dist).add(camera1->o).sub(origin);
+                        vec hitpos(raydir);
+                        hitpos.mul(dist).add(rayorigin).sub(origin);
                         hitx = vec(-p.y, p.x, 0).dot(hitpos)/scale.x;
                         hity = -hitpos.z/scale.y;
                     }
@@ -1385,7 +1399,19 @@ bool g3d_windowhit(bool on, bool act)
     return (guis2d.length() && hascursor) || (windowhit && !windowhit->gui2d);
 }
 
-void g3d_render()   
+// Whether any gui window (the boot main menu, or an in-game one like the
+// pause/options menu or scoreboard) was shown as of last frame's
+// g3d_render() -- used on Android to decide whether the right
+// controller's trigger should click a menu instead of firing the
+// weapon, and whether its aim should drive a pointer at all. One frame
+// stale (guis2d/guis3d are only repopulated the next time g3d_render()
+// runs), which is fine for this purpose.
+bool g3d_hasguiwindow()
+{
+    return guis2d.length()>0 || guis3d.length()>0;
+}
+
+void g3d_render()
 {
     windowhit = NULL;    
     if(actionon) mousebuttons |= G3D_PRESSED;
