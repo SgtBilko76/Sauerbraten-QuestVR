@@ -1909,7 +1909,16 @@ void TBXR_Recenter() {
 		spaceCreateInfo.poseInReferenceSpace.position.y = 0.0f;
 		OXR(xrCreateReferenceSpace(gAppState.Session, &spaceCreateInfo, &gAppState.StageSpace));
 		ALOGV("Created stage space");
-		gAppState.CurrentSpace = gAppState.StageSpace;
+		// Deliberately NOT made CurrentSpace, unlike the original
+		// reference sample: STAGE is anchored to the Guardian boundary,
+		// which the Quest's own personal-recenter gesture does not move
+		// -- confirmed on-device as the reason recentering had no visible
+		// effect at all. FakeStageSpace (LOCAL, just above) IS
+		// recenter-responsive, at the cost of using an approximate
+		// hardcoded eye-height offset instead of a real calibrated floor
+		// height. StageSpace is still created (harmless) in case
+		// something else ever wants it specifically, just not used as
+		// the space everything else in this file reads from.
 	}
 }
 
