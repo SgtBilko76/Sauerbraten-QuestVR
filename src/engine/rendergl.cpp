@@ -1173,6 +1173,27 @@ void renderavatar()
 {
     if(isthirdperson()) return;
 
+#ifdef __ANDROID__
+    // Desktop swaps in a separate, narrower, symmetric perspective just
+    // for the held weapon/viewmodel (curavatarfov/aspect, plus a Z-scale
+    // squeeze via avatardepth) so it doesn't look stretched at a wide
+    // desktop FOV, and so it doesn't clip through nearby walls. Neither
+    // reason applies in VR -- there's no unnaturally-wide FOV to
+    // compensate for (the headset's own per-eye FOV already matches real
+    // optics) -- and critically, this projection is IDENTICAL for both
+    // eyes, unlike the real per-eye asymmetric projmatrix
+    // (androidEyeTanL/R/U/D-derived) everything else in the scene
+    // renders through. That's the exact "flat/mismatched content warped
+    // differently per eye by the compositor's own per-eye lens
+    // correction" bug category already fixed several times elsewhere
+    // this project (main menu, crosshair, gameplay HUD, pause menu) --
+    // confirmed via a one-eye-closed-at-a-time test that this was indeed
+    // the root cause of the long-standing "gun doubled" report. Skipping
+    // the swap entirely lets the gun render through the same real
+    // per-eye projmatrix as every other object, which already fuses
+    // correctly for everything else in the game.
+    game::renderavatar();
+#else
     matrix4 oldprojmatrix = projmatrix;
     projmatrix.perspective(curavatarfov, aspect, nearplane, farplane);
     projmatrix.scalez(avatardepth);
@@ -1182,6 +1203,7 @@ void renderavatar()
 
     projmatrix = oldprojmatrix;
     setcamprojmatrix(false);
+#endif
 }
 
 FVAR(polygonoffsetfactor, -1e4f, -3.0f, 1e4f);
