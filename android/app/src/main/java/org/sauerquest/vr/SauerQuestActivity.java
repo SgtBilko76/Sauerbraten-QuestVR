@@ -69,8 +69,14 @@ public class SauerQuestActivity extends Activity implements SurfaceHolder.Callba
 		// vr_glue/sauerquest_vr_bootstrap.c's AppThreadFunction, right
 		// before it calls android_sauer_main()) so every relative fopen()
 		// the engine does just works against real files.
-		copyAssetTree("data", getFilesDir());
-		copyAssetTree("packages", getFilesDir());
+		//
+		// extractAssetsIfNeeded() skips this entirely on a plain relaunch
+		// of the same installed version -- copyAssetTree() itself always
+		// overwrites unconditionally with no existence check, which was
+		// fine at the original ~100MB curated bundle but became a real
+		// multi-minute stall on every single launch once the bundle grew
+		// to include every stock map/sound (~1GB+).
+		extractAssetsIfNeeded();
 
 		SurfaceView view = new SurfaceView(this);
 		setContentView(view);
@@ -89,6 +95,52 @@ public class SauerQuestActivity extends Activity implements SurfaceHolder.Callba
 		org.libsdl.app.SDLAudioManager.nativeSetupJNI();
 
 		mNativeHandle = SauerQuestJNILib.onCreate(this);
+	}
+
+	// Marker file recording which app versionCode's assets are currently
+	// extracted at getFilesDir() -- lets a plain relaunch of the same
+	// installed version skip re-copying entirely (copyAssetTree() itself
+	// has no existence check, so without this every launch re-copied the
+	// full bundle, harmless at the original ~100MB curated set but a
+	// real multi-minute stall once it grew to include every stock
+	// map/sound, ~1GB+). A new install/update (different versionCode)
+	// always re-extracts, so asset changes always take effect.
+	private static final String ASSETS_VERSION_MARKER = ".assets_version";
+
+	private void extractAssetsIfNeeded()
+	{
+		int currentVersion = 0;
+		try {
+			currentVersion = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+		} catch (android.content.pm.PackageManager.NameNotFoundException e) {
+			Log.e(TAG, "Could not read own versionCode; extracting assets unconditionally", e);
+		}
+
+		File marker = new File(getFilesDir(), ASSETS_VERSION_MARKER);
+		String markedVersion = null;
+		if (marker.exists()) {
+			try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(marker))) {
+				markedVersion = r.readLine();
+			} catch (IOException e) {
+				Log.w(TAG, "Could not read assets version marker", e);
+			}
+		}
+
+		if (markedVersion != null && markedVersion.equals(String.valueOf(currentVersion))) {
+			Log.v(TAG, "Assets already extracted for versionCode " + currentVersion + ", skipping copy");
+			return;
+		}
+
+		Log.v(TAG, "Extracting bundled assets (versionCode " + currentVersion + ")...");
+		copyAssetTree("data", getFilesDir());
+		copyAssetTree("packages", getFilesDir());
+
+		try (java.io.FileWriter w = new java.io.FileWriter(marker)) {
+			w.write(String.valueOf(currentVersion));
+		} catch (IOException e) {
+			// Non-fatal: assets did extract, just won't skip next launch.
+			Log.e(TAG, "Could not write assets version marker -- assets will re-extract every launch", e);
+		}
 	}
 
 	// Recursively copies assetSubdir (and everything under it) from the
