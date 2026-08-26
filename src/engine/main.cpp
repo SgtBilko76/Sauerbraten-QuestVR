@@ -1195,6 +1195,21 @@ void android_sauer_set_move(float sideways, float forward)
     // joystick.x -> positive strafe) was left/right-reversed.
     camera1->strafe = sideways > deadzone ? -1 : (sideways < -deadzone ? 1 : 0);
 }
+
+void android_sauer_jump(int isdown)
+{
+    processkey(SDLK_SPACE, isdown != 0);
+}
+
+void android_sauer_menu(int isdown)
+{
+    processkey(SDLK_ESCAPE, isdown != 0);
+}
+
+void android_sauer_tab(int isdown)
+{
+    processkey(SDLK_TAB, isdown != 0);
+}
 #endif
 
 #if defined(WIN32) && !defined(_DEBUG) && !defined(__GNUC__)

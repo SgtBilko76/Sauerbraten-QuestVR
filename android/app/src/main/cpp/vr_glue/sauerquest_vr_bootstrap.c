@@ -330,6 +330,43 @@ static void SauerQuest_UpdateLocomotion(void)
     }
 }
 
+/* Left controller: index trigger -> jump, Menu button -> ESCAPE
+ * (togglemainmenu), Y button -> TAB (showscores) -- same edge-detection
+ * pattern as the right trigger's fire/click handling above, each routed
+ * through android_sauer_jump()/menu()/tab() (main.cpp), which themselves
+ * go through processkey() so they pick up whatever those keys are bound
+ * to rather than hardcoding the bound command here. Unlike fire, jump is
+ * gated off in the main menu the same way (so a trigger-happy player
+ * sitting in the menu doesn't queue up a jump for when gameplay resumes);
+ * ESCAPE and TAB are left ungated since ESCAPE is exactly how the menu
+ * itself gets toggled and a TAB press while already in the menu is
+ * harmless (showscores just no-ops outside a game). */
+static void SauerQuest_UpdateLeftButtons(void)
+{
+    static bool jumpWasDown = false;
+    static bool menuWasDown = false;
+    static bool tabWasDown = false;
+
+    bool jumpDown = !android_sauer_is_mainmenu() &&
+        (leftTrackedRemoteState_new.Buttons & xrButton_Trigger) != 0;
+    if (jumpDown != jumpWasDown) {
+        android_sauer_jump(jumpDown ? 1 : 0);
+        jumpWasDown = jumpDown;
+    }
+
+    bool menuDown = (leftTrackedRemoteState_new.Buttons & xrButton_Enter) != 0;
+    if (menuDown != menuWasDown) {
+        android_sauer_menu(menuDown ? 1 : 0);
+        menuWasDown = menuDown;
+    }
+
+    bool tabDown = (leftTrackedRemoteState_new.Buttons & xrButton_Y) != 0;
+    if (tabDown != tabWasDown) {
+        android_sauer_tab(tabDown ? 1 : 0);
+        tabWasDown = tabDown;
+    }
+}
+
 void VR_HandleControllerInput(void)
 {
     SauerQuest_UpdateMenuScreenAnchor();
@@ -338,6 +375,7 @@ void VR_HandleControllerInput(void)
     SauerQuest_UpdateWeaponAim();
     SauerQuest_UpdateWeaponFire();
     SauerQuest_UpdateLocomotion();
+    SauerQuest_UpdateLeftButtons();
 }
 
 void VR_Shutdown(void)
