@@ -151,6 +151,12 @@ void android_sauer_tab(int isdown);
 // itself no-ops on an empty stack).
 void android_sauer_menu_back(int isdown);
 
+// Implemented in main.cpp; cycles to the next (dir>0) or previous
+// (dir<0) weapon, the same way desktop's mouse wheel does
+// (processkey(-4/-5, ...), bound to delta_do 1/-1 in defaults.cfg) --
+// momentary, not a held state, so each call is one discrete step.
+void android_sauer_weapon_cycle(int dir);
+
 #ifdef __cplusplus
 }
 #endif
