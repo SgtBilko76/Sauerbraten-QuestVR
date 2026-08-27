@@ -405,17 +405,27 @@ namespace game
 #ifdef __ANDROID__
     // World units the VR viewmodel is rendered at, from the head -- see
     // drawhudmodel()'s own comment for why this is fixed rather than the
-    // controller's real tracked distance. vrworldscale (rendergl.cpp) was
-    // 10 units/meter when this was tuned to 5 (splitting the difference
-    // between 7, "too small/far", and 4, judged too hard to fuse at the
-    // time) -- vrworldscale has since been corrected to 8 (confirmed too
-    // large, exaggerating near-field stereo disparity generally, not
-    // just for the gun), which likely means at least part of that
-    // fusion difficulty was the same miscalibration rather than purely
-    // inherent eye-vergence strain. Back to 4 (~0.4-0.5m depending on
-    // the corrected scale) for size; revisit distance again if doubling
-    // is still reported at this value now that the real cause is fixed.
-    VARP(hudgunvrdist, 1, 4, 1000);
+    // controller's real tracked distance. Confirmed on-device that some
+    // residual doubling remains at 4 even after fixing vrworldscale
+    // (rendergl.cpp) and adding the vrhudgunscale size boost just below
+    // -- consistent with genuine eye-vergence strain at that distance,
+    // not a further bug (each eye's own image stays clean). Back to 5,
+    // trading a little size for less of that residual; the scale boost
+    // below now carries more of the "make it feel closer/bigger" job
+    // instead, since it doesn't cost any extra vergence.
+    VARP(hudgunvrdist, 1, 5, 1000);
+
+    // Percentage of the model's own baked-in scale (mdlscale, set by
+    // each gun's own .cfg) to render the VR viewmodel at -- a genuine
+    // size increase at a *fixed* distance, unlike moving hudgunvrdist
+    // closer, which trades size for stereo-fusion difficulty (a closer
+    // object needs more eye vergence). Scaling instead keeps depth/
+    // disparity exactly the same while making the model visually
+    // bigger, so it doesn't reintroduce the doubling this project spent
+    // a long time fixing. Applied as a temporary push/pop around just
+    // the hud gun's own rendermodel() call (drawhudmodel() below), not
+    // the model's real vwep/attachment scale seen by other players.
+    VARP(vrhudgunscale, 25, 200, 800);
 #endif
 
     void drawhudmodel(fpsent *d, int anim, float speed = 0, int base = 0)
@@ -490,7 +500,14 @@ namespace game
             base = 0;
             interp = &guninterp;
         }
+#ifdef __ANDROID__
+        float vrgunrealscale = getmodelscale(gunname);
+        setmodelscale(gunname, vrgunrealscale*vrhudgunscale/100.0f);
+#endif
         rendermodel(NULL, gunname, anim, sway, testhudgun ? 0 : gunyaw, testhudgun ? 0 : gunpitch, MDL_LIGHT|MDL_HUD, interp, a, base, (int)ceil(speed));
+#ifdef __ANDROID__
+        setmodelscale(gunname, vrgunrealscale);
+#endif
         if(d->muzzle.x >= 0) d->muzzle = calcavatarpos(d->muzzle, 12);
     }
 
