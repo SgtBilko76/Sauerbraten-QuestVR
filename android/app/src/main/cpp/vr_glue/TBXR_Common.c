@@ -54,6 +54,12 @@ PFNEGLSIGNALSYNCKHRPROC			eglSignalSyncKHR;
 PFNEGLGETSYNCATTRIBKHRPROC		eglGetSyncAttribKHR;
 #endif
 
+// Tried 4x MSAA (see ovrFramebuffer_Create() below -- already
+// unconditionally goes through the GL_EXT_multisampled_render_to_texture
+// path regardless of this value, so it was a parameter change to an
+// already-exercised code path, not new/untested behavior) -- confirmed
+// on-device the framerate cost was too high on top of the existing
+// per-eye supersampling (SS_MULTIPLIER above). Back to 1 (no MSAA).
 int NUM_MULTI_SAMPLES	= 1;
 int REFRESH	            = 0;
 // Was 1.3f ("Let's go to the maximum!", vendored from the QuakeQuest
