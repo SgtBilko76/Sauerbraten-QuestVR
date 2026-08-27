@@ -1594,7 +1594,11 @@ void TBXR_InitRenderer(  ) {
             // headroom. Quest 2 stays at 1 (no MSAA) -- not available to
             // verify against, and starting from less headroom than
             // Quest 3 already needed to drop back from 4x.
-            NUM_MULTI_SAMPLES = 2;
+            // Testing 1x (no MSAA) again: 2x "played good" but the user
+            // wants to compare frame-time stability against the extra
+            // GPU headroom of dropping MSAA entirely, not just average
+            // FPS -- both are real cvars/settings, easy to flip back.
+            NUM_MULTI_SAMPLES = 1;
         }
 
         // Enumerate the supported color space options for the system.
