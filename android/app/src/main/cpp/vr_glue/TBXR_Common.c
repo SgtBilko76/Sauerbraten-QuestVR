@@ -1586,6 +1586,15 @@ void TBXR_InitRenderer(  ) {
         // recognized as Quest 3) keeps the safe 1.0 baseline.
         if (strstr(systemProperties.systemName, "Quest 3") != NULL) {
             SS_MULTIPLIER = 1.2f;
+            // 4x MSAA (see NUM_MULTI_SAMPLES's own comment) confirmed
+            // too expensive combined with the supersampling above, even
+            // on Quest 3 -- 2x is typically much cheaper (roughly half
+            // the bandwidth cost) with the same implicit-resolve
+            // technique, worth trying within the same confirmed GPU
+            // headroom. Quest 2 stays at 1 (no MSAA) -- not available to
+            // verify against, and starting from less headroom than
+            // Quest 3 already needed to drop back from 4x.
+            NUM_MULTI_SAMPLES = 2;
         }
 
         // Enumerate the supported color space options for the system.
