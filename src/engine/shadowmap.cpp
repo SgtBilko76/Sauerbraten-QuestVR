@@ -1,7 +1,16 @@
 #include "engine.h"
 #include "rendertarget.h"
 
+#ifdef __ANDROID__
+// Trying real-time dynamic shadows on Android -- off by default on
+// desktop too (an optional, heavier feature, not something previously
+// disabled specifically for this platform), so this is genuinely
+// untested here. Needs the same on-device FPS/GPU% verification as
+// every other graphics setting tuned this session.
+VARP(shadowmap, 0, 1, 1);
+#else
 VARP(shadowmap, 0, 0, 1);
+#endif
 
 extern void cleanshadowmap();
 VARFP(shadowmapsize, 7, 9, 11, cleanshadowmap());
