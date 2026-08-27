@@ -405,16 +405,17 @@ namespace game
 #ifdef __ANDROID__
     // World units the VR viewmodel is rendered at, from the head -- see
     // drawhudmodel()'s own comment for why this is fixed rather than the
-    // controller's real tracked distance. vrworldscale (rendergl.cpp,
-    // default 10 units/meter) makes 5 units roughly 0.5m. Confirmed
-    // on-device that 7 (0.7m) looked too small/far, and that after
-    // fixing the gun's real per-eye projection (renderavatar(), this
-    // file), the residual stereo-fusion difficulty at 4 (0.4m) is
-    // consistent with genuine eye-vergence strain from an object that
-    // close (each eye's own image is clean, confirmed via a
-    // one-eye-closed test) rather than a remaining bug -- splitting the
-    // difference trades a little apparent size for easier fusion.
-    VARP(hudgunvrdist, 1, 5, 1000);
+    // controller's real tracked distance. vrworldscale (rendergl.cpp) was
+    // 10 units/meter when this was tuned to 5 (splitting the difference
+    // between 7, "too small/far", and 4, judged too hard to fuse at the
+    // time) -- vrworldscale has since been corrected to 8 (confirmed too
+    // large, exaggerating near-field stereo disparity generally, not
+    // just for the gun), which likely means at least part of that
+    // fusion difficulty was the same miscalibration rather than purely
+    // inherent eye-vergence strain. Back to 4 (~0.4-0.5m depending on
+    // the corrected scale) for size; revisit distance again if doubling
+    // is still reported at this value now that the real cause is fixed.
+    VARP(hudgunvrdist, 1, 4, 1000);
 #endif
 
     void drawhudmodel(fpsent *d, int anim, float speed = 0, int base = 0)
