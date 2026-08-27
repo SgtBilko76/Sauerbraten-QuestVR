@@ -442,6 +442,14 @@ extern void interpolateorientation(dynent *d, float &interpyaw, float &interppit
 extern void setbbfrommodel(dynent *d, const char *mdl);
 extern const char *mapmodelname(int i);
 extern model *loadmodel(const char *name, int i = -1, bool msg = false);
+// Gets/sets the named (already-loaded) model's mdlscale -- model itself
+// is only forward-declared above, deliberately opaque to game code, so
+// this is the way to read/adjust it without reaching into the engine's
+// own model.h. Used by the VR viewmodel's own size boost
+// (drawhudmodel(), fpsgame/render.cpp). getmodelscale() returns 1.0f if
+// the model isn't (yet) loaded; setmodelscale() is a no-op in that case.
+extern float getmodelscale(const char *name);
+extern void setmodelscale(const char *name, float scale);
 extern void preloadmodel(const char *name);
 extern void flushpreloadedmodels(bool msg = true);
 

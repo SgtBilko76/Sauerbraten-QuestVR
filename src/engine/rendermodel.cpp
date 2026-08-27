@@ -449,6 +449,24 @@ model *loadmodel(const char *name, int i, bool msg)
     return m;
 }
 
+// model.h isn't visible outside the engine (model is only
+// forward-declared in iengine.h, deliberately opaque to game code) -- so
+// a game-side caller wanting to temporarily rescale a loaded model (the
+// VR viewmodel's own size boost, drawhudmodel(), fpsgame/render.cpp)
+// can't just reach into m->scale directly. 1.0f if the model isn't
+// (yet) loaded, in both cases.
+float getmodelscale(const char *name)
+{
+    model *m = loadmodel(name);
+    return m ? m->scale : 1.0f;
+}
+
+void setmodelscale(const char *name, float scale)
+{
+    model *m = loadmodel(name);
+    if(m) m->scale = scale;
+}
+
 void preloadmodelshaders(bool force)
 {
     if(initing) return;
