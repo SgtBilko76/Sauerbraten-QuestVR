@@ -2,12 +2,15 @@
 #include "rendertarget.h"
 
 #ifdef __ANDROID__
-// Trying real-time dynamic shadows on Android -- off by default on
-// desktop too (an optional, heavier feature, not something previously
-// disabled specifically for this platform), so this is genuinely
-// untested here. Needs the same on-device FPS/GPU% verification as
-// every other graphics setting tuned this session.
-VARP(shadowmap, 0, 1, 1);
+// Tried enabling this -- initial on-device check looked fine, but a
+// real bot match (more models/bots casting shadows simultaneously than
+// the earlier check happened to stress) confirmed it GPU-saturates
+// (VrApi's own GPU%=0.87-1.00) and drops to 26-40/72fps with heavy
+// stale-frame counts, regardless of resolution (confirmed the same at
+// both 1.2x and 1.3x supersampling -- shadowmap itself is the dominant
+// cost, not resolution). Back to off. If revisited, needs a real,
+// sustained multi-bot match for verification, not just a quick look.
+VARP(shadowmap, 0, 0, 1);
 #else
 VARP(shadowmap, 0, 0, 1);
 #endif

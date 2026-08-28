@@ -1585,6 +1585,14 @@ void TBXR_InitRenderer(  ) {
         // no separate per-device APK needed. Quest 2 (and anything not
         // recognized as Quest 3) keeps the safe 1.0 baseline.
         if (strstr(systemProperties.systemName, "Quest 3") != NULL) {
+            // Tried 1.3f -- confirmed on-device (with shadowmap now also
+            // enabled) as GPU-saturated (GPU%=0.99-1.00) and dropping to
+            // 35-48/72fps with very high stale-frame counts, clearly too
+            // much combined load. Back to 1.2f, the last value actually
+            // confirmed comfortable (57-79% GPU) -- that measurement
+            // predates shadowmap, so even 1.2f's real headroom now is
+            // untested; revisit if performance is still reported as
+            // rough.
             SS_MULTIPLIER = 1.2f;
             // 4x MSAA (see NUM_MULTI_SAMPLES's own comment) confirmed
             // too expensive combined with the supersampling above, even
