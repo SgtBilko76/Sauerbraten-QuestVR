@@ -42,6 +42,14 @@ android/**/build/
 android/**/.cxx/
 android/**/.gradle/
 android/local.properties
+
+# Release signing credentials -- never versioned. Losing this keystore
+# means future release builds can never be signed to match an already-
+# installed one (Android refuses to update an app with a different
+# signature), so keep a backup of it and keystore.properties somewhere
+# safe outside this repo.
+android/keystore.properties
+android/app/release.keystore
 android/**/*.apk
 android/**/*.aab
 android/**/obj/
