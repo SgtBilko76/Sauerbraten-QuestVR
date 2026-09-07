@@ -1,5 +1,15 @@
 apply plugin: 'com.android.application'
 
+// Release signing credentials -- kept out of git (android/keystore.properties,
+// android/app/release.keystore, both in .gitignore). If this file is
+// missing (e.g. a fresh checkout), release builds simply won't be signed;
+// debug builds are unaffected.
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
+
 android {
     namespace = "org.sauerquest.vr"
     compileSdk = 34
@@ -9,8 +19,8 @@ android {
         applicationId "org.sauerquest.vr"
         minSdkVersion 29
         targetSdkVersion 32
-        versionCode 10
-        versionName "0.0.3"
+        versionCode 12
+        versionName "0.0.4"
 
         externalNativeBuild {
             ndkBuild {
@@ -46,6 +56,17 @@ android {
         }
     }
 
+    signingConfigs {
+        release {
+            if (keystorePropsFile.exists()) {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         debug {
             debuggable true
@@ -54,6 +75,9 @@ android {
         release {
             debuggable false
             jniDebuggable false
+            if (keystorePropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 
@@ -116,12 +140,19 @@ tasks.named("preBuild").configure {
 // in since it's outside the paths AGP itself manages -- stage it into a
 // normal jniLibs.srcDir instead, ordered explicitly after the native
 // build and before native-lib merging.
-tasks.register("copySDL2SharedLib", Copy) {
-    dependsOn("buildNdkBuildDebug")
-    from("C:/sq_ndkbuild/obj/local/arm64-v8a") {
-        include "libSDL2.so"
+// One copy task per build type (Debug/Release) -- both ndk-build
+// invocations share the same physical NDK_OUT (see the
+// externalNativeBuild.ndkBuild arguments above), so whichever variant was
+// built most recently is what's sitting there; each copy task depends on
+// its own buildNdkBuild<Type> to make sure that's actually the matching one.
+["Debug", "Release"].each { buildTypeName ->
+    tasks.register("copySDL2SharedLib${buildTypeName}", Copy) {
+        dependsOn("buildNdkBuild${buildTypeName}")
+        from("C:/sq_ndkbuild/obj/local/arm64-v8a") {
+            include "libSDL2.so"
+        }
+        into "$buildDir/generated/sdl2-shared/jniLibs/arm64-v8a"
     }
-    into "$buildDir/generated/sdl2-shared/jniLibs/arm64-v8a"
 }
 
 // AGP registers its variant-specific native-lib-merge tasks lazily, only
@@ -129,10 +160,12 @@ tasks.register("copySDL2SharedLib", Copy) {
 // needs afterEvaluate here, unlike the preBuild hook above (a task Gradle
 // itself always creates up front).
 afterEvaluate {
-    tasks.named("mergeDebugNativeLibs").configure {
-        dependsOn("copySDL2SharedLib")
-    }
-    tasks.named("mergeDebugJniLibFolders").configure {
-        dependsOn("copySDL2SharedLib")
+    ["Debug", "Release"].each { buildTypeName ->
+        tasks.named("merge${buildTypeName}NativeLibs").configure {
+            dependsOn("copySDL2SharedLib${buildTypeName}")
+        }
+        tasks.named("merge${buildTypeName}JniLibFolders").configure {
+            dependsOn("copySDL2SharedLib${buildTypeName}")
+        }
     }
 }
