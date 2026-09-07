@@ -1585,27 +1585,26 @@ void TBXR_InitRenderer(  ) {
         // no separate per-device APK needed. Quest 2 (and anything not
         // recognized as Quest 3) keeps the safe 1.0 baseline.
         if (strstr(systemProperties.systemName, "Quest 3") != NULL) {
-            // Tried 1.3f -- confirmed on-device (with shadowmap now also
-            // enabled) as GPU-saturated (GPU%=0.99-1.00) and dropping to
-            // 35-48/72fps with very high stale-frame counts, clearly too
-            // much combined load. Back to 1.2f, the last value actually
-            // confirmed comfortable (57-79% GPU) -- that measurement
-            // predates shadowmap, so even 1.2f's real headroom now is
-            // untested; revisit if performance is still reported as
-            // rough.
-            SS_MULTIPLIER = 1.2f;
-            // 4x MSAA (see NUM_MULTI_SAMPLES's own comment) confirmed
-            // too expensive combined with the supersampling above, even
-            // on Quest 3 -- 2x is typically much cheaper (roughly half
-            // the bandwidth cost) with the same implicit-resolve
-            // technique, worth trying within the same confirmed GPU
-            // headroom. Quest 2 stays at 1 (no MSAA) -- not available to
-            // verify against, and starting from less headroom than
-            // Quest 3 already needed to drop back from 4x.
-            // Testing 1x (no MSAA) again: 2x "played good" but the user
-            // wants to compare frame-time stability against the extra
-            // GPU headroom of dropping MSAA entirely, not just average
-            // FPS -- both are real cvars/settings, easy to flip back.
+            // History, most recent last (values tried, in order):
+            // SS_MULTIPLIER 1.3 -> GPU-saturated (99-100%), 35-48fps,
+            // heavy stale frames, combined with shadowmap -- too much.
+            // 1.2 -> shadowmap reverted off, but still GPU~99-100% on
+            // duel7 and confirmed via micro-stuttering reports as having
+            // no real headroom for frame-time spikes (bot spawns,
+            // particle bursts). 1.0 (no boost at all) -> confirmed ZERO
+            // change to the stuttering, ruling out GPU/resolution as the
+            // cause entirely. 1.1, then back to 1.0 with 2x MSAA also
+            // tried -> user reported framerate too low with MSAA at
+            // 1.2x/2x combined, so back to MSAA off. 1.2 re-tested
+            // (MSAA off) for direct comparison against 1.1 on the
+            // stutter question. Settled on 1.0 (no supersampling) by
+            // explicit user choice for extra GPU headroom on bigger/
+            // less-optimized community maps (not just duel7 -- see the
+            // map-dependent-performance note elsewhere in this file's
+            // history). The actual stutter cause is still open --
+            // resolution/MSAA don't appear to be it, not yet
+            // root-caused.
+            SS_MULTIPLIER = 1.0f;
             NUM_MULTI_SAMPLES = 1;
         }
 
