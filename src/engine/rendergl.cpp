@@ -2296,7 +2296,7 @@ void gl_drawframe()
 // no double-layering). A flat darkening overlay drawn on top of
 // everything is the standard comfort fix. Percentage of full black;
 // tune live via /vrmenudim.
-VARP(vrmenudim, 0, 65, 100);
+VARP(vrmenudim, 0, 75, 100);
 
 // Same fix, separately tunable, for actual gameplay (gl_drawframe(), via
 // gl_drawhud() below) -- confirmed on-device as the same perceptual
@@ -2308,7 +2308,7 @@ VARP(vrmenudim, 0, 65, 100);
 // long before the light itself would -- this isn't lighting being
 // disabled, it's a symptom of the same overbrightness. Tune live via
 // /vrgamedim.
-VARP(vrgamedim, 0, 45, 100);
+VARP(vrgamedim, 0, 55, 100);
 
 static void drawvrdim(int amount, int w, int h)
 {
